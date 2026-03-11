@@ -293,6 +293,7 @@ export default function Game() {
           store.activeCosmeticTypeRef.current as CosmeticType,
           engine.isHolding,
           s.frameCount,
+          engine.holdAge,
         );
 
         drawShieldGlow(
@@ -364,6 +365,9 @@ export default function Game() {
         background: '#000',
         overflow: 'hidden',
         userSelect: 'none',
+        // Belt-and-suspenders: suppress the mobile browser's blue tap-highlight
+        // on this element in addition to the global CSS rule in index.css.
+        WebkitTapHighlightColor: 'transparent',
         // Disable all default touch gestures on the container so the game
         // captures every pointer event cleanly on mobile.
         touchAction: 'none',

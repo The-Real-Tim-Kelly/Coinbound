@@ -14,8 +14,28 @@ export function drawPlayerShape(
   skin: PlayerSkin,
   isHolding: boolean,
   frameCount: number,
+  holdAge = 0,
 ): void {
   const hs = PLAYER_SIZE / 2;
+
+  // Touch-start pulse ring — expands and fades over the first 10 frames of a
+  // hold so feedback is localised to the cube, not the whole screen.
+  if (isHolding && holdAge < 10) {
+    const progress = holdAge / 10;
+    const ringR = PLAYER_SIZE * (0.58 + progress * 0.72);
+    const ringAlpha = 0.75 * (1 - progress);
+    ctx.save();
+    ctx.strokeStyle = `rgba(0,210,255,${ringAlpha.toFixed(3)})`;
+    ctx.lineWidth = 2.5;
+    ctx.shadowColor = '#00ccff';
+    ctx.shadowBlur = 16 * (1 - progress);
+    ctx.beginPath();
+    ctx.arc(0, 0, ringR, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+
   ctx.shadowColor = isHolding ? '#00ccff' : skin.glow;
   ctx.shadowBlur = isHolding ? 24 : 14;
 
@@ -229,12 +249,20 @@ export function drawPlayer(
   cosmeticType: CosmeticType,
   isHolding: boolean,
   frameCount: number,
+  holdAge = 0,
 ): void {
   ctx.save();
   ctx.translate(PLAYER_X + PLAYER_SIZE / 2, playerY + PLAYER_SIZE / 2);
   const tilt = Math.max(-0.35, Math.min(0.35, playerVY * 0.04));
   ctx.rotate(tilt);
-  drawPlayerShape(ctx, cosmeticType, skin, isHolding, frameCount);
+  // Briefly scale the cube up on touch-start then settle back — gives a
+  // tactile 'press' feel without affecting anything outside the cube bounds.
+  if (isHolding && holdAge < 10) {
+    const scaleT = holdAge / 10;
+    const touchScale = 1 + 0.1 * (1 - scaleT);
+    ctx.scale(touchScale, touchScale);
+  }
+  drawPlayerShape(ctx, cosmeticType, skin, isHolding, frameCount, holdAge);
   ctx.restore();
 }
 

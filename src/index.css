@@ -4,6 +4,10 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  /* Suppress the mobile browser's default blue tap-highlight overlay so the
+     full-screen container div does not flash blue on every touch. Visual
+     touch feedback is handled by the canvas cube pulse instead. */
+  -webkit-tap-highlight-color: transparent;
 }
 
 html,
