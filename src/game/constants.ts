@@ -49,6 +49,14 @@ export const LUCKY_CHARM_COSTS = [15, 35, 75, 150, 300];
 export const LUCKY_CHARM_BONUS_PER_LEVEL = 0.15; // +15% extra-spawn chance per level
 export const LUCKY_COIN_CHECK_INTERVAL = 55; // frames between bonus spawn roll checks
 
+// ─── Particle caps (limits simultaneous particles to avoid mobile lag) ────────
+export const MAX_TRAIL_PARTICLES = 80;
+export const MAX_MAG_PARTICLES = 40;
+export const MAX_CEIL_PARTICLES = 30;
+export const MAX_SHIELD_SHARDS = 30;
+export const MAX_RARE_COIN_PARTICLES = 60;
+export const MAX_FLOATING_TEXTS = 8;
+
 // ─── Audio ────────────────────────────────────────────────────────────────────
 export const MUSIC_BPM = 120; // synthwave tempo
 export const MUSIC_STEP_S = 60 / MUSIC_BPM / 4; // 16th-note duration in seconds

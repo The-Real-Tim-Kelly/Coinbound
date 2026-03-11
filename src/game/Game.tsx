@@ -25,6 +25,12 @@ import {
   LUCKY_CHARM_BONUS_PER_LEVEL,
   LUCKY_COIN_CHECK_INTERVAL,
   MIN_OBSTACLE_SPACING,
+  MAX_TRAIL_PARTICLES,
+  MAX_MAG_PARTICLES,
+  MAX_CEIL_PARTICLES,
+  MAX_SHIELD_SHARDS,
+  MAX_RARE_COIN_PARTICLES,
+  MAX_FLOATING_TEXTS,
 } from './constants';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -94,6 +100,7 @@ export default function Game() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stateRef = useRef<GameState>(makeInitialState());
   const rafRef = useRef<number>(0);
+  const lastTimeRef = useRef<number>(0);
   const gameOverFiredRef = useRef(false);
   const isHoldingRef = useRef(false);
   const holdAgeRef = useRef(0);
@@ -214,7 +221,7 @@ export default function Game() {
 
     stateRef.current = makeInitialState(stateRef.current.hiScore);
 
-    const draw = () => {
+    const draw = (dtFactor: number) => {
       const s = stateRef.current;
 
       // Background
@@ -230,17 +237,17 @@ export default function Game() {
 
       // Physics update
       if (!s.gameOver) {
-        s.frameCount++;
+        s.frameCount += dtFactor;
         s.speed = INITIAL_SPEED + s.frameCount * SPEED_INCREMENT;
-        bgOffsetRef.current += s.speed;
+        bgOffsetRef.current += s.speed * dtFactor;
 
         if (isHoldingRef.current) {
-          s.playerVY -= HOLD_GRAVITY;
+          s.playerVY -= HOLD_GRAVITY * dtFactor;
         } else {
-          s.playerVY += GRAVITY;
+          s.playerVY += GRAVITY * dtFactor;
         }
         s.playerVY = Math.max(-MAX_VY, Math.min(MAX_VY, s.playerVY));
-        s.playerY += s.playerVY;
+        s.playerY += s.playerVY * dtFactor;
 
         if (s.playerY <= 0) {
           s.playerY = 0;
@@ -314,9 +321,9 @@ export default function Game() {
         }
 
         // Scroll world left
-        for (const obs of s.obstacles) obs.x -= s.speed;
-        for (const coin of s.coins) coin.x -= s.speed;
-        for (const sp of s.shieldPickups) sp.x -= s.speed;
+        for (const obs of s.obstacles) obs.x -= s.speed * dtFactor;
+        for (const coin of s.coins) coin.x -= s.speed * dtFactor;
+        for (const sp of s.shieldPickups) sp.x -= s.speed * dtFactor;
 
         // Remove off-screen entities
         s.obstacles = s.obstacles.filter((o) => o.x > -o.w - 2);
@@ -346,7 +353,7 @@ export default function Game() {
             const distSq = mdx * mdx + mdy * mdy;
             if (distSq < magnetRadius * magnetRadius && distSq > 0) {
               const dist = Math.sqrt(distSq);
-              const strength = 0.15 * (1 - dist / magnetRadius);
+              const strength = 0.15 * dtFactor * (1 - dist / magnetRadius);
               coin.x += mdx * strength;
               coin.y += mdy * strength;
             }
@@ -367,6 +374,10 @@ export default function Game() {
             if (s.coinCount > s.hiCoins) s.hiCoins = s.coinCount;
             if (coin.isRare) {
               for (let i = 0; i < 24; i++) {
+                if (
+                  rareCoinParticlesRef.current.length >= MAX_RARE_COIN_PARTICLES
+                )
+                  break;
                 const ang = (i / 24) * Math.PI * 2 + Math.random() * 0.26;
                 const spd = 2.5 + Math.random() * 5.0;
                 rareCoinParticlesRef.current.push({
@@ -380,13 +391,15 @@ export default function Game() {
                   hue: 270 + Math.random() * 60,
                 });
               }
-              floatingTextsRef.current.push({
-                x: PLAYER_X + PLAYER_SIZE / 2,
-                y: s.playerY - 4,
-                text: '+5',
-                age: 0,
-                maxAge: 55,
-              });
+              if (floatingTextsRef.current.length < MAX_FLOATING_TEXTS) {
+                floatingTextsRef.current.push({
+                  x: PLAYER_X + PLAYER_SIZE / 2,
+                  y: s.playerY - 4,
+                  text: '+5',
+                  age: 0,
+                  maxAge: 55,
+                });
+              }
               audio.playRareCoinSfxRef.current();
             }
           }
@@ -435,6 +448,8 @@ export default function Game() {
                   const bpx = PLAYER_X + PLAYER_SIZE / 2;
                   const bpy = s.playerY + PLAYER_SIZE / 2;
                   for (let i = 0; i < 28; i++) {
+                    if (shieldShardRef.current.length >= MAX_SHIELD_SHARDS)
+                      break;
                     const ang = Math.random() * Math.PI * 2;
                     const spd = 2.5 + Math.random() * 5.5;
                     shieldShardRef.current.push({
@@ -459,7 +474,7 @@ export default function Game() {
           }
         }
 
-        if (s.bounceAge > 0) s.bounceAge--;
+        if (s.bounceAge > 0) s.bounceAge = Math.max(0, s.bounceAge - dtFactor);
 
         // Trail particles
         const trail = store.activeTrailRef.current;
@@ -468,6 +483,8 @@ export default function Game() {
           const tpy = s.playerY + PLAYER_SIZE / 2;
           if (trail === 'sparks') {
             for (let i = 0; i < 2; i++) {
+              if (trailParticlesRef.current.length >= MAX_TRAIL_PARTICLES)
+                break;
               trailParticlesRef.current.push({
                 x: tpx + Math.random() * 8,
                 y: tpy + (Math.random() - 0.5) * PLAYER_SIZE * 0.7,
@@ -481,41 +498,47 @@ export default function Game() {
               });
             }
           } else if (trail === 'stars') {
-            trailParticlesRef.current.push({
-              x: tpx + Math.random() * 10,
-              y: tpy + (Math.random() - 0.5) * PLAYER_SIZE * 0.6,
-              vx: -(s.speed * 0.5 + 0.4 + Math.random() * 1.0),
-              vy: (Math.random() - 0.5) * 0.5,
-              age: 0,
-              maxAge: 30 + Math.random() * 20,
-              size: 3 + Math.random() * 3,
-              hue: 0,
-              color: `hsl(${50 + Math.random() * 20},100%,80%)`,
-            });
+            if (trailParticlesRef.current.length < MAX_TRAIL_PARTICLES) {
+              trailParticlesRef.current.push({
+                x: tpx + Math.random() * 10,
+                y: tpy + (Math.random() - 0.5) * PLAYER_SIZE * 0.6,
+                vx: -(s.speed * 0.5 + 0.4 + Math.random() * 1.0),
+                vy: (Math.random() - 0.5) * 0.5,
+                age: 0,
+                maxAge: 30 + Math.random() * 20,
+                size: 3 + Math.random() * 3,
+                hue: 0,
+                color: `hsl(${50 + Math.random() * 20},100%,80%)`,
+              });
+            }
           } else if (trail === 'ghost') {
-            trailParticlesRef.current.push({
-              x: tpx + Math.random() * 10,
-              y: tpy + (Math.random() - 0.5) * PLAYER_SIZE * 0.7,
-              vx: -(s.speed * 0.35 + 0.2 + Math.random() * 0.6),
-              vy: (Math.random() - 0.5) * 0.3,
-              age: 0,
-              maxAge: 40 + Math.random() * 20,
-              size: 7 + Math.random() * 8,
-              hue: 0,
-              color: '',
-            });
+            if (trailParticlesRef.current.length < MAX_TRAIL_PARTICLES) {
+              trailParticlesRef.current.push({
+                x: tpx + Math.random() * 10,
+                y: tpy + (Math.random() - 0.5) * PLAYER_SIZE * 0.7,
+                vx: -(s.speed * 0.35 + 0.2 + Math.random() * 0.6),
+                vy: (Math.random() - 0.5) * 0.3,
+                age: 0,
+                maxAge: 40 + Math.random() * 20,
+                size: 7 + Math.random() * 8,
+                hue: 0,
+                color: '',
+              });
+            }
           } else if (trail === 'rainbow') {
-            trailParticlesRef.current.push({
-              x: tpx + Math.random() * 8,
-              y: tpy + (Math.random() - 0.5) * PLAYER_SIZE * 0.6,
-              vx: -(s.speed * 0.45 + 0.4 + Math.random() * 1.2),
-              vy: (Math.random() - 0.5) * 0.8,
-              age: 0,
-              maxAge: 25 + Math.random() * 15,
-              size: 4 + Math.random() * 4,
-              hue: (s.frameCount * 6 + Math.random() * 40) % 360,
-              color: '',
-            });
+            if (trailParticlesRef.current.length < MAX_TRAIL_PARTICLES) {
+              trailParticlesRef.current.push({
+                x: tpx + Math.random() * 8,
+                y: tpy + (Math.random() - 0.5) * PLAYER_SIZE * 0.6,
+                vx: -(s.speed * 0.45 + 0.4 + Math.random() * 1.2),
+                vy: (Math.random() - 0.5) * 0.8,
+                age: 0,
+                maxAge: 25 + Math.random() * 15,
+                size: 4 + Math.random() * 4,
+                hue: (s.frameCount * 6 + Math.random() * 40) % 360,
+                color: '',
+              });
+            }
           }
         }
 
@@ -524,6 +547,7 @@ export default function Game() {
           const mpx = PLAYER_X + PLAYER_SIZE / 2;
           const mpy = s.playerY;
           for (let i = 0; i < 2; i++) {
+            if (magParticlesRef.current.length >= MAX_MAG_PARTICLES) break;
             magParticlesRef.current.push({
               x: mpx + (Math.random() - 0.5) * PLAYER_SIZE * 0.75,
               y: mpy + Math.random() * 4,
@@ -534,9 +558,10 @@ export default function Game() {
               size: 2 + Math.random() * 3,
             });
           }
-          holdAgeRef.current++;
+          holdAgeRef.current += dtFactor;
           const ceilCount = 1 + Math.floor(Math.random() * 3);
           for (let i = 0; i < ceilCount; i++) {
+            if (ceilParticlesRef.current.length >= MAX_CEIL_PARTICLES) break;
             ceilParticlesRef.current.push({
               x: Math.random() * CANVAS_W,
               y: Math.random() * 4,
@@ -582,26 +607,32 @@ export default function Game() {
         ctx,
         trailParticlesRef.current,
         store.activeTrailRef.current,
+        dtFactor,
       );
       magParticlesRef.current = updateAndDrawMagParticles(
         ctx,
         magParticlesRef.current,
+        dtFactor,
       );
       ceilParticlesRef.current = updateAndDrawCeilParticles(
         ctx,
         ceilParticlesRef.current,
+        dtFactor,
       );
       shieldShardRef.current = updateAndDrawShieldShards(
         ctx,
         shieldShardRef.current,
+        dtFactor,
       );
       rareCoinParticlesRef.current = updateAndDrawRareCoinParticles(
         ctx,
         rareCoinParticlesRef.current,
+        dtFactor,
       );
       floatingTextsRef.current = updateAndDrawFloatingTexts(
         ctx,
         floatingTextsRef.current,
+        dtFactor,
       );
 
       if (!s.gameOver) {
@@ -647,8 +678,16 @@ export default function Game() {
       drawHUD(ctx, s.score, s.coinCount, s.hiScore);
     };
 
-    const loop = () => {
-      draw();
+    const loop = (timestamp: number) => {
+      // Compute delta time, clamped to avoid huge jumps after tab-switching.
+      // Normalised to 1.0 at 60 fps so all existing per-frame constants stay valid.
+      const dt =
+        lastTimeRef.current > 0
+          ? Math.min((timestamp - lastTimeRef.current) / 1000, 0.05)
+          : 1 / 60;
+      lastTimeRef.current = timestamp;
+      const dtFactor = dt * 60;
+      draw(dtFactor);
       rafRef.current = requestAnimationFrame(loop);
     };
     rafRef.current = requestAnimationFrame(loop);
@@ -697,26 +736,19 @@ export default function Game() {
         background: '#000',
         overflow: 'hidden',
         userSelect: 'none',
+        touchAction: 'none',
       }}
-      onMouseDown={isPlaying ? startHold : undefined}
-      onMouseUp={isPlaying ? endHold : undefined}
-      onMouseLeave={isPlaying ? endHold : undefined}
-      onTouchStart={
+      onPointerDown={
         isPlaying
           ? (e) => {
-              e.preventDefault();
+              e.currentTarget.setPointerCapture(e.pointerId);
               startHold();
             }
           : undefined
       }
-      onTouchEnd={
-        isPlaying
-          ? (e) => {
-              e.preventDefault();
-              endHold();
-            }
-          : undefined
-      }
+      onPointerUp={isPlaying ? endHold : undefined}
+      onPointerLeave={isPlaying ? endHold : undefined}
+      onPointerCancel={isPlaying ? endHold : undefined}
     >
       <canvas
         ref={canvasRef}
@@ -728,6 +760,7 @@ export default function Game() {
           imageRendering: 'pixelated',
           cursor: 'pointer',
           display: 'block',
+          touchAction: 'none',
         }}
       />
 

@@ -11,13 +11,14 @@ export function updateAndDrawTrailParticles(
   ctx: CanvasRenderingContext2D,
   particles: TrailParticle[],
   activeTrail: string,
+  dtFactor: number,
 ): TrailParticle[] {
   const kept: TrailParticle[] = [];
   for (const p of particles) {
-    p.age += 1;
+    p.age += dtFactor;
     if (p.age >= p.maxAge) continue;
-    p.x += p.vx;
-    p.y += p.vy;
+    p.x += p.vx * dtFactor;
+    p.y += p.vy * dtFactor;
     kept.push(p);
     const alpha = 1 - p.age / p.maxAge;
     ctx.save();
@@ -57,14 +58,15 @@ export function updateAndDrawTrailParticles(
 export function updateAndDrawMagParticles(
   ctx: CanvasRenderingContext2D,
   particles: MagParticle[],
+  dtFactor: number,
 ): MagParticle[] {
   const kept: MagParticle[] = [];
   for (const p of particles) {
-    p.age += 1;
+    p.age += dtFactor;
     if (p.age >= p.maxAge) continue;
-    p.x += p.vx;
-    p.y += p.vy;
-    p.vy *= 0.96;
+    p.x += p.vx * dtFactor;
+    p.y += p.vy * dtFactor;
+    p.vy *= Math.pow(0.96, dtFactor);
     kept.push(p);
     const t = p.age / p.maxAge;
     const alpha = (1 - t) * 0.85;
@@ -87,14 +89,15 @@ export function updateAndDrawMagParticles(
 export function updateAndDrawCeilParticles(
   ctx: CanvasRenderingContext2D,
   particles: CeilParticle[],
+  dtFactor: number,
 ): CeilParticle[] {
   const kept: CeilParticle[] = [];
   for (const p of particles) {
-    p.age += 1;
+    p.age += dtFactor;
     if (p.age >= p.maxAge) continue;
-    p.x += p.vx;
-    p.y += p.vy;
-    p.vy *= 0.92;
+    p.x += p.vx * dtFactor;
+    p.y += p.vy * dtFactor;
+    p.vy *= Math.pow(0.92, dtFactor);
     kept.push(p);
     const t = p.age / p.maxAge;
     const alpha = (1 - t) * 0.92;
@@ -116,15 +119,16 @@ export function updateAndDrawCeilParticles(
 export function updateAndDrawShieldShards(
   ctx: CanvasRenderingContext2D,
   particles: ShieldShard[],
+  dtFactor: number,
 ): ShieldShard[] {
   const kept: ShieldShard[] = [];
   for (const p of particles) {
-    p.age += 1;
+    p.age += dtFactor;
     if (p.age >= p.maxAge) continue;
-    p.x += p.vx;
-    p.y += p.vy;
-    p.vx *= 0.93;
-    p.vy *= 0.93;
+    p.x += p.vx * dtFactor;
+    p.y += p.vy * dtFactor;
+    p.vx *= Math.pow(0.93, dtFactor);
+    p.vy *= Math.pow(0.93, dtFactor);
     kept.push(p);
     const t = p.age / p.maxAge;
     const alpha = (1 - t) * 0.95;
@@ -151,15 +155,16 @@ export function updateAndDrawShieldShards(
 export function updateAndDrawRareCoinParticles(
   ctx: CanvasRenderingContext2D,
   particles: RareCoinParticle[],
+  dtFactor: number,
 ): RareCoinParticle[] {
   const kept: RareCoinParticle[] = [];
   for (const p of particles) {
-    p.age += 1;
+    p.age += dtFactor;
     if (p.age >= p.maxAge) continue;
-    p.x += p.vx;
-    p.y += p.vy;
-    p.vx *= 0.92;
-    p.vy *= 0.92;
+    p.x += p.vx * dtFactor;
+    p.y += p.vy * dtFactor;
+    p.vx *= Math.pow(0.92, dtFactor);
+    p.vy *= Math.pow(0.92, dtFactor);
     kept.push(p);
     const t = p.age / p.maxAge;
     const alpha = (1 - t) * 0.9;
@@ -181,12 +186,13 @@ export function updateAndDrawRareCoinParticles(
 export function updateAndDrawFloatingTexts(
   ctx: CanvasRenderingContext2D,
   particles: FloatingText[],
+  dtFactor: number,
 ): FloatingText[] {
   const kept: FloatingText[] = [];
   for (const ft of particles) {
-    ft.age += 1;
+    ft.age += dtFactor;
     if (ft.age >= ft.maxAge) continue;
-    ft.y -= 0.85;
+    ft.y -= 0.85 * dtFactor;
     kept.push(ft);
     const t = ft.age / ft.maxAge;
     const alpha = t < 0.6 ? 1 : 1 - (t - 0.6) / 0.4;
