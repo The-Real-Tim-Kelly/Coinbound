@@ -1,58 +1,29 @@
+﻿/**
+ * Game  thin React orchestrator.
+ *
+ * Responsibilities:
+ *    Owns the GameEngine instance and the animation-frame loop.
+ *    Wires pointer / keyboard input  engine.setHolding().
+ *    Syncs store config into the engine on every frame.
+ *    Calls canvas render helpers after each engine.update().
+ *    Renders React UI overlays (menus, modals) as DOM elements.
+ *
+ * All physics, collision, spawning, and particle-emission logic
+ * lives in src/game/engine/GameEngine.ts.
+ */
+
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-// ── Constants ─────────────────────────────────────────────────────────────────
-import {
-  CANVAS_W,
-  CANVAS_H,
-  PLAYER_X,
-  PLAYER_SIZE,
-  GRAVITY,
-  MAX_VY,
-  HOLD_GRAVITY,
-  OBSTACLE_INTERVAL,
-  INITIAL_SPEED,
-  SPEED_INCREMENT,
-  COIN_RADIUS,
-  COIN_INTERVAL,
-  RARE_COIN_CHANCE,
-  RARE_COIN_VALUE,
-  SHIELD_RADIUS,
-  SHIELD_INTERVAL,
-  SHIELD_BOUNCE_VY,
-  SHIELD_BOUNCE_PUSHBACK,
-  SHIELD_BOUNCE_DURATION,
-  MAGNET_RADIUS_PER_LEVEL,
-  LUCKY_CHARM_BONUS_PER_LEVEL,
-  LUCKY_COIN_CHECK_INTERVAL,
-  MIN_OBSTACLE_SPACING,
-  MAX_TRAIL_PARTICLES,
-  MAX_MAG_PARTICLES,
-  MAX_CEIL_PARTICLES,
-  MAX_SHIELD_SHARDS,
-  MAX_RARE_COIN_PARTICLES,
-  MAX_FLOATING_TEXTS,
-} from './constants';
+//  Constants
+import { CANVAS_W, CANVAS_H, PLAYER_X, PLAYER_SIZE } from './constants';
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-import type {
-  GameState,
-  TrailParticle,
-  MagParticle,
-  CeilParticle,
-  ShieldShard,
-  RareCoinParticle,
-  FloatingText,
-} from './types';
+//  Engine
+import { GameEngine } from './engine/GameEngine';
 
-// ── Data ──────────────────────────────────────────────────────────────────────
+//  Data
 import { PLAYER_SKINS } from './data/cosmetics';
 
-// ── Logic ─────────────────────────────────────────────────────────────────────
-import { makeInitialState } from './logic/gameState';
-import { spawnObstacle } from './logic/obstacles';
-import { spawnCoin, spawnShield, findSafeSpawnY } from './logic/coins';
-
-// ── Render ────────────────────────────────────────────────────────────────────
+//  Render helpers
 import { drawBackground } from './render/drawBackground';
 import { drawObstacles } from './render/drawObstacles';
 import { drawCoins } from './render/drawCoins';
@@ -76,18 +47,19 @@ import {
 } from './render/drawPlayer';
 import { drawHUD } from './render/drawHUD';
 
-// ── Audio & store hooks ────────────────────────────────────────────────────────
+//  Audio & store
 import { useAudio } from './audio/useAudio';
 import { useStore } from './hooks/useStore';
 
-// ── UI components ─────────────────────────────────────────────────────────────
+//  UI components
 import { MainMenu } from './ui/MainMenu';
 import { GameOverScreen } from './ui/GameOverScreen';
 import { ShopModal } from './ui/ShopModal';
 import { SettingsModal } from './ui/SettingsModal';
 import { InGameButtons } from './ui/InGameButtons';
+import type { CosmeticType } from './types';
 
-// ─────────────────────────────────────────────────────────────────────────────
+//
 
 interface GameOverData {
   score: number;
@@ -98,23 +70,11 @@ interface GameOverData {
 
 export default function Game() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const stateRef = useRef<GameState>(makeInitialState());
   const rafRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(0);
   const gameOverFiredRef = useRef(false);
-  const isHoldingRef = useRef(false);
-  const holdAgeRef = useRef(0);
-  const bgOffsetRef = useRef(0);
 
-  // Particle arrays
-  const trailParticlesRef = useRef<TrailParticle[]>([]);
-  const magParticlesRef = useRef<MagParticle[]>([]);
-  const ceilParticlesRef = useRef<CeilParticle[]>([]);
-  const shieldShardRef = useRef<ShieldShard[]>([]);
-  const rareCoinParticlesRef = useRef<RareCoinParticle[]>([]);
-  const floatingTextsRef = useRef<FloatingText[]>([]);
-
-  // Hooks
+  //  Hooks
   const store = useStore();
   const audio = useAudio({
     initialMuted: localStorage.getItem('coinbound_muted') === 'true',
@@ -128,24 +88,38 @@ export default function Game() {
     ),
   });
 
-  // UI state
+  //  GameEngine (created once; stable across all re-renders)
+  const engineRef = useRef<GameEngine | null>(null);
+  if (engineRef.current == null) {
+    engineRef.current = new GameEngine(
+      {
+        magnetLevel: store.magnetLevelRef.current,
+        luckyCharmLevel: store.luckyCharmLevelRef.current,
+        activeTrail: store.activeTrailRef.current,
+      },
+      {
+        // Callbacks read `.current` at fire-time so they always invoke the
+        // latest audio function even after re-renders.
+        onRareCoinCollected: () => audio.playRareCoinSfxRef.current(),
+        onShieldPickedUp: () => audio.playShieldPickupSfxRef.current(),
+        onShieldBroken: () => audio.playShieldBreakSfxRef.current(),
+      },
+    );
+  }
+
+  //  UI state
   const [showShop, setShowShop] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [isMenuVisible, setIsMenuVisible] = useState(true);
   const [gameOverData, setGameOverData] = useState<GameOverData | null>(null);
 
-  // ── Navigation helpers ──────────────────────────────────────────────────────
+  //  Navigation helpers
 
   const startGame = useCallback(() => {
-    const s = stateRef.current;
-    stateRef.current = makeInitialState(s.hiScore, s.hiCoins);
-    stateRef.current.started = true;
+    const engine = engineRef.current!;
+    engine.reset(engine.state.hiScore, engine.state.hiCoins);
+    engine.start();
     gameOverFiredRef.current = false;
-    magParticlesRef.current = [];
-    ceilParticlesRef.current = [];
-    shieldShardRef.current = [];
-    rareCoinParticlesRef.current = [];
-    floatingTextsRef.current = [];
     setIsMenuVisible(false);
     setShowShop(false);
     setShowSettings(false);
@@ -154,15 +128,10 @@ export default function Game() {
   }, [audio.startMusicRef]);
 
   const retry = useCallback(() => {
-    const s = stateRef.current;
-    stateRef.current = makeInitialState(s.hiScore, s.hiCoins);
-    stateRef.current.started = true;
+    const engine = engineRef.current!;
+    engine.reset(engine.state.hiScore, engine.state.hiCoins);
+    engine.start();
     gameOverFiredRef.current = false;
-    magParticlesRef.current = [];
-    ceilParticlesRef.current = [];
-    shieldShardRef.current = [];
-    rareCoinParticlesRef.current = [];
-    floatingTextsRef.current = [];
     setIsMenuVisible(false);
     setShowShop(false);
     setShowSettings(false);
@@ -171,15 +140,9 @@ export default function Game() {
   }, [audio.startMusicRef]);
 
   const goToMenu = useCallback(() => {
-    const s = stateRef.current;
-    stateRef.current = makeInitialState(s.hiScore, s.hiCoins);
+    const engine = engineRef.current!;
+    engine.reset(engine.state.hiScore, engine.state.hiCoins);
     gameOverFiredRef.current = false;
-    isHoldingRef.current = false;
-    magParticlesRef.current = [];
-    ceilParticlesRef.current = [];
-    shieldShardRef.current = [];
-    rareCoinParticlesRef.current = [];
-    floatingTextsRef.current = [];
     setIsMenuVisible(true);
     setShowShop(false);
     setShowSettings(false);
@@ -187,398 +150,71 @@ export default function Game() {
     audio.stopMusicRef.current();
   }, [audio.stopMusicRef]);
 
-  // ── Input handlers ──────────────────────────────────────────────────────────
+  //  Input handlers
 
   const startHold = useCallback(() => {
-    const s = stateRef.current;
-    if (!s.started || s.gameOver) return;
-    holdAgeRef.current = 0;
-    isHoldingRef.current = true;
+    const engine = engineRef.current!;
+    if (!engine.state.started || engine.state.gameOver) return;
+    engine.setHolding(true);
     audio.startMagnetHum();
-  }, [audio.startMagnetHum]);
+  }, [audio]);
 
   const endHold = useCallback(() => {
-    isHoldingRef.current = false;
+    engineRef.current?.setHolding(false);
     audio.stopMagnetHum();
-  }, [audio.stopMagnetHum]);
+  }, [audio]);
 
-  // ── Trail equip wrapper (also clears particle array) ─────────────────────────
+  //  Trail equip (clears particles + notifies engine)
 
   const handleEquipTrail = useCallback(
     (id: string) => {
       store.equipTrail(id);
-      trailParticlesRef.current = [];
+      const engine = engineRef.current;
+      if (engine) {
+        engine.clearTrailParticles();
+        engine.updateConfig({ activeTrail: id });
+      }
     },
     [store],
   );
 
-  // ── Game loop ────────────────────────────────────────────────────────────────
+  //  Animation-frame loop
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d')!;
 
-    stateRef.current = makeInitialState(stateRef.current.hiScore);
+    const loop = (timestamp: number) => {
+      const engine = engineRef.current!;
+      const s = engine.state;
+      const p = engine.particles;
 
-    const draw = (dtFactor: number) => {
-      const s = stateRef.current;
+      // Push latest store values into the engine every frame so upgrades
+      // and equipped items take effect without any extra wiring.
+      engine.updateConfig({
+        magnetLevel: store.magnetLevelRef.current,
+        luckyCharmLevel: store.luckyCharmLevelRef.current,
+        activeTrail: store.activeTrailRef.current,
+      });
 
-      // Background
-      drawBackground(
-        ctx,
-        store.activeBgRef.current,
-        bgOffsetRef.current,
-        s.started,
-        s.speed,
-      );
+      //  Delta time, normalised to 60 fps
+      // Clamped to 50 ms (20 fps minimum) to prevent physics tunnelling
+      // after tab switches or slow frames.
+      const dt =
+        lastTimeRef.current > 0
+          ? Math.min((timestamp - lastTimeRef.current) / 1000, 0.05)
+          : 1 / 60;
+      lastTimeRef.current = timestamp;
+      const dtFactor = dt * 60; // 1.0 at exactly 60 fps
 
-      if (!s.started) return;
+      //  Advance game logic
+      engine.update(dtFactor);
 
-      // Physics update
-      if (!s.gameOver) {
-        s.frameCount += dtFactor;
-        s.speed = INITIAL_SPEED + s.frameCount * SPEED_INCREMENT;
-        bgOffsetRef.current += s.speed * dtFactor;
-
-        if (isHoldingRef.current) {
-          s.playerVY -= HOLD_GRAVITY * dtFactor;
-        } else {
-          s.playerVY += GRAVITY * dtFactor;
-        }
-        s.playerVY = Math.max(-MAX_VY, Math.min(MAX_VY, s.playerVY));
-        s.playerY += s.playerVY * dtFactor;
-
-        if (s.playerY <= 0) {
-          s.playerY = 0;
-          s.playerVY = 0;
-        }
-        if (s.playerY + PLAYER_SIZE >= CANVAS_H) {
-          s.playerY = CANVAS_H - PLAYER_SIZE;
-          s.playerVY = 0;
-        }
-
-        // Spawn obstacles
-        const lastObs = s.obstacles[s.obstacles.length - 1];
-        const spacingClear =
-          !lastObs || lastObs.x + lastObs.w < CANVAS_W - MIN_OBSTACLE_SPACING;
-        if (s.frameCount - s.lastSpawn >= OBSTACLE_INTERVAL && spacingClear) {
-          s.lastSpawn = s.frameCount;
-          s.obstacles.push(spawnObstacle());
-        }
-
-        // Spawn coins
-        if (s.frameCount - s.lastCoinSpawn >= COIN_INTERVAL) {
-          s.lastCoinSpawn = s.frameCount;
-          const coin = spawnCoin(Math.random() < RARE_COIN_CHANCE);
-          coin.y = findSafeSpawnY(
-            coin.x,
-            coin.radius,
-            s.obstacles,
-            COIN_RADIUS + 10,
-            CANVAS_H - COIN_RADIUS * 2 - 10,
-          );
-          s.coins.push(coin);
-        }
-
-        // Lucky charm bonus coins
-        if (
-          store.luckyCharmLevelRef.current > 0 &&
-          s.frameCount - s.lastLuckySpawn >= LUCKY_COIN_CHECK_INTERVAL
-        ) {
-          s.lastLuckySpawn = s.frameCount;
-          const luckyChance =
-            store.luckyCharmLevelRef.current * LUCKY_CHARM_BONUS_PER_LEVEL;
-          if (Math.random() < luckyChance) {
-            const luckyCoin = spawnCoin(Math.random() < RARE_COIN_CHANCE);
-            luckyCoin.y = findSafeSpawnY(
-              luckyCoin.x,
-              luckyCoin.radius,
-              s.obstacles,
-              COIN_RADIUS + 10,
-              CANVAS_H - COIN_RADIUS * 2 - 10,
-            );
-            s.coins.push(luckyCoin);
-          }
-        }
-
-        // Spawn shield (rare; only one on screen at a time)
-        if (
-          !s.shieldActive &&
-          !s.shieldPickups.some((sp) => !sp.collected) &&
-          s.frameCount - s.lastShieldSpawn >= SHIELD_INTERVAL
-        ) {
-          s.lastShieldSpawn = s.frameCount;
-          const shield = spawnShield();
-          shield.y = findSafeSpawnY(
-            shield.x,
-            shield.radius,
-            s.obstacles,
-            SHIELD_RADIUS + 14,
-            CANVAS_H - SHIELD_RADIUS * 2 - 14,
-          );
-          s.shieldPickups.push(shield);
-        }
-
-        // Scroll world left
-        for (const obs of s.obstacles) obs.x -= s.speed * dtFactor;
-        for (const coin of s.coins) coin.x -= s.speed * dtFactor;
-        for (const sp of s.shieldPickups) sp.x -= s.speed * dtFactor;
-
-        // Remove off-screen entities
-        s.obstacles = s.obstacles.filter((o) => o.x > -o.w - 2);
-        s.coins = s.coins.filter((c) => !c.collected && c.x > -c.radius - 2);
-        s.shieldPickups = s.shieldPickups.filter(
-          (sp) => !sp.collected && sp.x > -sp.radius - 2,
-        );
-
-        // Score: count passed obstacles
-        for (const obs of s.obstacles) {
-          if (!obs.passed && obs.x + obs.w < PLAYER_X) {
-            obs.passed = true;
-            s.score++;
-          }
-        }
-
-        // Coin magnet attraction
-        const pcx = PLAYER_X + PLAYER_SIZE / 2;
-        const pcy = s.playerY + PLAYER_SIZE / 2;
-        const magnetRadius =
-          store.magnetLevelRef.current * MAGNET_RADIUS_PER_LEVEL;
-        if (magnetRadius > 0) {
-          for (const coin of s.coins) {
-            if (coin.collected) continue;
-            const mdx = pcx - coin.x;
-            const mdy = pcy - coin.y;
-            const distSq = mdx * mdx + mdy * mdy;
-            if (distSq < magnetRadius * magnetRadius && distSq > 0) {
-              const dist = Math.sqrt(distSq);
-              const strength = 0.15 * dtFactor * (1 - dist / magnetRadius);
-              coin.x += mdx * strength;
-              coin.y += mdy * strength;
-            }
-          }
-        }
-
-        // Coin collection (circle-AABB overlap)
-        const half = PLAYER_SIZE / 2;
-        for (const coin of s.coins) {
-          if (coin.collected) continue;
-          const nearX = Math.max(pcx - half, Math.min(pcx + half, coin.x));
-          const nearY = Math.max(pcy - half, Math.min(pcy + half, coin.y));
-          const dx = coin.x - nearX;
-          const dy = coin.y - nearY;
-          if (dx * dx + dy * dy < coin.radius * coin.radius) {
-            coin.collected = true;
-            s.coinCount += coin.isRare ? RARE_COIN_VALUE : 1;
-            if (s.coinCount > s.hiCoins) s.hiCoins = s.coinCount;
-            if (coin.isRare) {
-              for (let i = 0; i < 24; i++) {
-                if (
-                  rareCoinParticlesRef.current.length >= MAX_RARE_COIN_PARTICLES
-                )
-                  break;
-                const ang = (i / 24) * Math.PI * 2 + Math.random() * 0.26;
-                const spd = 2.5 + Math.random() * 5.0;
-                rareCoinParticlesRef.current.push({
-                  x: coin.x,
-                  y: coin.y,
-                  vx: Math.cos(ang) * spd,
-                  vy: Math.sin(ang) * spd,
-                  age: 0,
-                  maxAge: 28 + Math.random() * 22,
-                  size: 2 + Math.random() * 3.5,
-                  hue: 270 + Math.random() * 60,
-                });
-              }
-              if (floatingTextsRef.current.length < MAX_FLOATING_TEXTS) {
-                floatingTextsRef.current.push({
-                  x: PLAYER_X + PLAYER_SIZE / 2,
-                  y: s.playerY - 4,
-                  text: '+5',
-                  age: 0,
-                  maxAge: 55,
-                });
-              }
-              audio.playRareCoinSfxRef.current();
-            }
-          }
-        }
-
-        // Shield pickup collection
-        if (!s.shieldActive) {
-          for (const sp of s.shieldPickups) {
-            if (sp.collected) continue;
-            const spNX = Math.max(pcx - half, Math.min(pcx + half, sp.x));
-            const spNY = Math.max(pcy - half, Math.min(pcy + half, sp.y));
-            const spDx = sp.x - spNX;
-            const spDy = sp.y - spNY;
-            if (spDx * spDx + spDy * spDy < sp.radius * sp.radius) {
-              sp.collected = true;
-              s.shieldActive = true;
-              audio.playShieldPickupSfxRef.current();
-            }
-          }
-        }
-
-        // Collision: obstacles (AABB with 4 px inset, per-slab)
-        const px1 = PLAYER_X + 4;
-        const px2 = PLAYER_X + PLAYER_SIZE - 4;
-        const py1 = s.playerY + 4;
-        const py2 = s.playerY + PLAYER_SIZE - 4;
-
-        collisionLoop: for (const obs of s.obstacles) {
-          if (px2 > obs.x && px1 < obs.x + obs.w) {
-            for (const slab of obs.slabs) {
-              if (py2 > slab.y && py1 < slab.y + slab.h) {
-                if (s.shieldActive) {
-                  s.shieldActive = false;
-                  s.bounceAge = SHIELD_BOUNCE_DURATION;
-                  const slabMidY = slab.y + slab.h / 2;
-                  s.playerVY =
-                    pcy < slabMidY ? -SHIELD_BOUNCE_VY : SHIELD_BOUNCE_VY;
-                  for (const o of s.obstacles) o.x += SHIELD_BOUNCE_PUSHBACK;
-                  for (const c of s.coins) c.x += SHIELD_BOUNCE_PUSHBACK;
-                  for (const shp of s.shieldPickups)
-                    shp.x += SHIELD_BOUNCE_PUSHBACK;
-                  bgOffsetRef.current = Math.max(
-                    0,
-                    bgOffsetRef.current - SHIELD_BOUNCE_PUSHBACK,
-                  );
-                  const bpx = PLAYER_X + PLAYER_SIZE / 2;
-                  const bpy = s.playerY + PLAYER_SIZE / 2;
-                  for (let i = 0; i < 28; i++) {
-                    if (shieldShardRef.current.length >= MAX_SHIELD_SHARDS)
-                      break;
-                    const ang = Math.random() * Math.PI * 2;
-                    const spd = 2.5 + Math.random() * 5.5;
-                    shieldShardRef.current.push({
-                      x: bpx + (Math.random() - 0.5) * PLAYER_SIZE,
-                      y: bpy + (Math.random() - 0.5) * PLAYER_SIZE,
-                      vx: Math.cos(ang) * spd,
-                      vy: Math.sin(ang) * spd,
-                      age: 0,
-                      maxAge: 22 + Math.random() * 20,
-                      size: 1.5 + Math.random() * 3,
-                      hue: 200 + Math.random() * 60,
-                    });
-                  }
-                  audio.playShieldBreakSfxRef.current();
-                } else {
-                  s.gameOver = true;
-                  if (s.score > s.hiScore) s.hiScore = s.score;
-                }
-                break collisionLoop;
-              }
-            }
-          }
-        }
-
-        if (s.bounceAge > 0) s.bounceAge = Math.max(0, s.bounceAge - dtFactor);
-
-        // Trail particles
-        const trail = store.activeTrailRef.current;
-        if (trail !== 'none') {
-          const tpx = PLAYER_X;
-          const tpy = s.playerY + PLAYER_SIZE / 2;
-          if (trail === 'sparks') {
-            for (let i = 0; i < 2; i++) {
-              if (trailParticlesRef.current.length >= MAX_TRAIL_PARTICLES)
-                break;
-              trailParticlesRef.current.push({
-                x: tpx + Math.random() * 8,
-                y: tpy + (Math.random() - 0.5) * PLAYER_SIZE * 0.7,
-                vx: -(s.speed + 0.5 + Math.random() * 2),
-                vy: (Math.random() - 0.5) * 1.5,
-                age: 0,
-                maxAge: 18 + Math.random() * 12,
-                size: 2 + Math.random() * 3,
-                hue: 0,
-                color: `hsl(${20 + Math.random() * 30},100%,${55 + Math.random() * 25}%)`,
-              });
-            }
-          } else if (trail === 'stars') {
-            if (trailParticlesRef.current.length < MAX_TRAIL_PARTICLES) {
-              trailParticlesRef.current.push({
-                x: tpx + Math.random() * 10,
-                y: tpy + (Math.random() - 0.5) * PLAYER_SIZE * 0.6,
-                vx: -(s.speed * 0.5 + 0.4 + Math.random() * 1.0),
-                vy: (Math.random() - 0.5) * 0.5,
-                age: 0,
-                maxAge: 30 + Math.random() * 20,
-                size: 3 + Math.random() * 3,
-                hue: 0,
-                color: `hsl(${50 + Math.random() * 20},100%,80%)`,
-              });
-            }
-          } else if (trail === 'ghost') {
-            if (trailParticlesRef.current.length < MAX_TRAIL_PARTICLES) {
-              trailParticlesRef.current.push({
-                x: tpx + Math.random() * 10,
-                y: tpy + (Math.random() - 0.5) * PLAYER_SIZE * 0.7,
-                vx: -(s.speed * 0.35 + 0.2 + Math.random() * 0.6),
-                vy: (Math.random() - 0.5) * 0.3,
-                age: 0,
-                maxAge: 40 + Math.random() * 20,
-                size: 7 + Math.random() * 8,
-                hue: 0,
-                color: '',
-              });
-            }
-          } else if (trail === 'rainbow') {
-            if (trailParticlesRef.current.length < MAX_TRAIL_PARTICLES) {
-              trailParticlesRef.current.push({
-                x: tpx + Math.random() * 8,
-                y: tpy + (Math.random() - 0.5) * PLAYER_SIZE * 0.6,
-                vx: -(s.speed * 0.45 + 0.4 + Math.random() * 1.2),
-                vy: (Math.random() - 0.5) * 0.8,
-                age: 0,
-                maxAge: 25 + Math.random() * 15,
-                size: 4 + Math.random() * 4,
-                hue: (s.frameCount * 6 + Math.random() * 40) % 360,
-                color: '',
-              });
-            }
-          }
-        }
-
-        // Magnetic hold particles
-        if (isHoldingRef.current) {
-          const mpx = PLAYER_X + PLAYER_SIZE / 2;
-          const mpy = s.playerY;
-          for (let i = 0; i < 2; i++) {
-            if (magParticlesRef.current.length >= MAX_MAG_PARTICLES) break;
-            magParticlesRef.current.push({
-              x: mpx + (Math.random() - 0.5) * PLAYER_SIZE * 0.75,
-              y: mpy + Math.random() * 4,
-              vx: (Math.random() - 0.5) * 1.2,
-              vy: -(2.0 + Math.random() * 3.0),
-              age: 0,
-              maxAge: 22 + Math.random() * 18,
-              size: 2 + Math.random() * 3,
-            });
-          }
-          holdAgeRef.current += dtFactor;
-          const ceilCount = 1 + Math.floor(Math.random() * 3);
-          for (let i = 0; i < ceilCount; i++) {
-            if (ceilParticlesRef.current.length >= MAX_CEIL_PARTICLES) break;
-            ceilParticlesRef.current.push({
-              x: Math.random() * CANVAS_W,
-              y: Math.random() * 4,
-              vx: (Math.random() - 0.5) * 2.5,
-              vy: 0.8 + Math.random() * 2.5,
-              age: 0,
-              maxAge: 12 + Math.random() * 14,
-              size: 1 + Math.random() * 2.2,
-            });
-          }
-        }
-      } // end !gameOver physics block
-
-      // Game-over transition: notify React once
+      //  Game-over transition (fires exactly once)
       if (s.gameOver && !gameOverFiredRef.current) {
         gameOverFiredRef.current = true;
-        isHoldingRef.current = false;
+        engine.setHolding(false);
         audio.stopMagnetHumRef.current();
         audio.stopMusicRef.current();
         store.addRunCoins(s.coinCount);
@@ -590,114 +226,106 @@ export default function Game() {
         });
       }
 
-      // ── Rendering ─────────────────────────────────────────────────────────
+      //  Canvas rendering
 
-      // Ceiling glow (while holding)
-      if (isHoldingRef.current && !s.gameOver) {
-        drawCeilingGlow(ctx, holdAgeRef.current, s.frameCount);
-      }
-
-      // Screen shake
-      const shaking = applyScreenShake(ctx, s.bounceAge);
-
-      drawCoins(ctx, s.coins, s.shieldPickups, s.frameCount);
-      drawObstacles(ctx, s.obstacles);
-
-      trailParticlesRef.current = updateAndDrawTrailParticles(
+      // Background is always drawn (menu and gameplay).
+      drawBackground(
         ctx,
-        trailParticlesRef.current,
-        store.activeTrailRef.current,
-        dtFactor,
-      );
-      magParticlesRef.current = updateAndDrawMagParticles(
-        ctx,
-        magParticlesRef.current,
-        dtFactor,
-      );
-      ceilParticlesRef.current = updateAndDrawCeilParticles(
-        ctx,
-        ceilParticlesRef.current,
-        dtFactor,
-      );
-      shieldShardRef.current = updateAndDrawShieldShards(
-        ctx,
-        shieldShardRef.current,
-        dtFactor,
-      );
-      rareCoinParticlesRef.current = updateAndDrawRareCoinParticles(
-        ctx,
-        rareCoinParticlesRef.current,
-        dtFactor,
-      );
-      floatingTextsRef.current = updateAndDrawFloatingTexts(
-        ctx,
-        floatingTextsRef.current,
-        dtFactor,
+        store.activeBgRef.current,
+        engine.bgOffset,
+        s.started,
+        s.speed,
       );
 
-      if (!s.gameOver) {
-        drawMagnetField(
+      if (s.started) {
+        // Ceiling magnetic glow while the player holds input.
+        if (engine.isHolding && !s.gameOver) {
+          drawCeilingGlow(ctx, engine.holdAge, s.frameCount);
+        }
+
+        // Screen shake  saves ctx; restore called after shaken draws.
+        const shaking = applyScreenShake(ctx, s.bounceAge);
+
+        drawCoins(ctx, s.coins, s.shieldPickups, s.frameCount);
+        drawObstacles(ctx, s.obstacles);
+
+        // Particle systems: each function filters dead particles and returns
+        // the trimmed array that we store back onto the particles object.
+        p.trail = updateAndDrawTrailParticles(
           ctx,
-          store.magnetLevelRef.current,
+          p.trail,
+          store.activeTrailRef.current,
+          dtFactor,
+        );
+        p.mag = updateAndDrawMagParticles(ctx, p.mag, dtFactor);
+        p.ceil = updateAndDrawCeilParticles(ctx, p.ceil, dtFactor);
+        p.shieldShards = updateAndDrawShieldShards(
+          ctx,
+          p.shieldShards,
+          dtFactor,
+        );
+        p.rareCoin = updateAndDrawRareCoinParticles(ctx, p.rareCoin, dtFactor);
+        p.floatingTexts = updateAndDrawFloatingTexts(
+          ctx,
+          p.floatingTexts,
+          dtFactor,
+        );
+
+        // Magnet attraction ring (only while alive).
+        if (!s.gameOver) {
+          drawMagnetField(
+            ctx,
+            store.magnetLevelRef.current,
+            PLAYER_X + PLAYER_SIZE / 2,
+            s.playerY + PLAYER_SIZE / 2,
+          );
+        }
+
+        const skin =
+          PLAYER_SKINS.find((sk) => sk.id === store.activeSkinRef.current) ??
+          PLAYER_SKINS[0];
+
+        drawPlayer(
+          ctx,
+          s.playerY,
+          s.playerVY,
+          skin,
+          store.activeCosmeticTypeRef.current as CosmeticType,
+          engine.isHolding,
+          s.frameCount,
+        );
+
+        drawShieldGlow(
+          ctx,
           PLAYER_X + PLAYER_SIZE / 2,
           s.playerY + PLAYER_SIZE / 2,
+          s.shieldActive,
+          s.frameCount,
         );
+
+        drawElectricArc(
+          ctx,
+          engine.isHolding && !s.gameOver,
+          s.playerY,
+          engine.holdAge,
+        );
+
+        // Restore context saved by applyScreenShake.
+        if (shaking) ctx.restore();
+
+        drawBounceFlash(ctx, s.bounceAge);
+        drawShieldHudIndicator(ctx, s.shieldActive, s.frameCount);
+        drawHUD(ctx, s.score, s.coinCount, s.hiScore);
       }
 
-      const skin =
-        PLAYER_SKINS.find((sk) => sk.id === store.activeSkinRef.current) ??
-        PLAYER_SKINS[0];
-      drawPlayer(
-        ctx,
-        s.playerY,
-        s.playerVY,
-        skin,
-        store.activeCosmeticTypeRef.current as import('./types').CosmeticType,
-        isHoldingRef.current,
-        s.frameCount,
-      );
-
-      drawShieldGlow(
-        ctx,
-        PLAYER_X + PLAYER_SIZE / 2,
-        s.playerY + PLAYER_SIZE / 2,
-        s.shieldActive,
-        s.frameCount,
-      );
-      drawElectricArc(
-        ctx,
-        isHoldingRef.current && !s.gameOver,
-        s.playerY,
-        holdAgeRef.current,
-      );
-
-      if (shaking) ctx.restore();
-
-      drawBounceFlash(ctx, s.bounceAge);
-      drawShieldHudIndicator(ctx, s.shieldActive, s.frameCount);
-      drawHUD(ctx, s.score, s.coinCount, s.hiScore);
-    };
-
-    const loop = (timestamp: number) => {
-      // Compute delta time, clamped to avoid huge jumps after tab-switching.
-      // Normalised to 1.0 at 60 fps so all existing per-frame constants stay valid.
-      const dt =
-        lastTimeRef.current > 0
-          ? Math.min((timestamp - lastTimeRef.current) / 1000, 0.05)
-          : 1 / 60;
-      lastTimeRef.current = timestamp;
-      const dtFactor = dt * 60;
-      draw(dtFactor);
       rafRef.current = requestAnimationFrame(loop);
     };
-    rafRef.current = requestAnimationFrame(loop);
 
-    return () => {
-      cancelAnimationFrame(rafRef.current);
-    };
+    rafRef.current = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafRef.current);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Keyboard input ──────────────────────────────────────────────────────────
+  //  Keyboard input
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -720,7 +348,7 @@ export default function Game() {
     };
   }, [startHold, endHold]);
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  //  JSX
 
   const isPlaying = !isMenuVisible && !gameOverData;
 
@@ -736,11 +364,15 @@ export default function Game() {
         background: '#000',
         overflow: 'hidden',
         userSelect: 'none',
+        // Disable all default touch gestures on the container so the game
+        // captures every pointer event cleanly on mobile.
         touchAction: 'none',
       }}
       onPointerDown={
         isPlaying
           ? (e) => {
+              // Retain pointer capture so pointerup fires even if the finger
+              // travels outside the element.
               e.currentTarget.setPointerCapture(e.pointerId);
               startHold();
             }
@@ -750,6 +382,7 @@ export default function Game() {
       onPointerLeave={isPlaying ? endHold : undefined}
       onPointerCancel={isPlaying ? endHold : undefined}
     >
+      {/* Single canvas for all dynamic gameplay rendering */}
       <canvas
         ref={canvasRef}
         width={CANVAS_W}
@@ -764,7 +397,8 @@ export default function Game() {
         }}
       />
 
-      {/* Main menu */}
+      {/*  React DOM overlays (UI only  no gameplay rendering here)  */}
+
       {isMenuVisible && !showShop && !showSettings && (
         <MainMenu
           totalCoins={store.totalCoins}
@@ -774,7 +408,6 @@ export default function Game() {
         />
       )}
 
-      {/* Game over */}
       {gameOverData && !showShop && !showSettings && (
         <GameOverScreen
           score={gameOverData.score}
@@ -787,7 +420,6 @@ export default function Game() {
         />
       )}
 
-      {/* In-game buttons (SHOP + SETTINGS) */}
       {isPlaying && (
         <InGameButtons
           muted={audio.muted}
@@ -796,7 +428,6 @@ export default function Game() {
         />
       )}
 
-      {/* Shop modal */}
       <ShopModal
         visible={showShop}
         onClose={() => setShowShop(false)}
@@ -817,7 +448,6 @@ export default function Game() {
         onEquipCosmeticType={store.equipCosmeticType}
       />
 
-      {/* Settings modal */}
       <SettingsModal
         visible={showSettings}
         onClose={() => setShowSettings(false)}
