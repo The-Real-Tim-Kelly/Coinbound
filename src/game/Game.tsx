@@ -15,7 +15,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 //  Constants
-import { CANVAS_W, CANVAS_H, PLAYER_X, PLAYER_SIZE } from './constants';
+import { CANVAS_W, CANVAS_H, PLAYER_X, PLAYER_SIZE, DEATH_ANIM_DURATION } from './constants';
 
 //  Engine
 import { GameEngine } from './engine/GameEngine';
@@ -34,6 +34,7 @@ import {
   updateAndDrawShieldShards,
   updateAndDrawRareCoinParticles,
   updateAndDrawFloatingTexts,
+  updateAndDrawDeathParticles,
 } from './render/drawParticles';
 import {
   drawPlayer,
@@ -73,6 +74,9 @@ export default function Game() {
   const rafRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(0);
   const gameOverFiredRef = useRef(false);
+  // Stores the game-over data while the death animation plays; cleared once
+  // the GameOverScreen is actually shown (after ~400 ms).
+  const pendingGameOverRef = useRef<GameOverData | null>(null);
 
   //  Hooks
   const store = useStore();
@@ -101,6 +105,7 @@ export default function Game() {
         // Callbacks read `.current` at fire-time so they always invoke the
         // latest audio function even after re-renders.
         onRareCoinCollected: () => audio.playRareCoinSfxRef.current(),
+        onCoinCollected: () => audio.playCoinSfxRef.current(),
         onShieldPickedUp: () => audio.playShieldPickupSfxRef.current(),
         onShieldBroken: () => audio.playShieldBreakSfxRef.current(),
       },
@@ -120,6 +125,7 @@ export default function Game() {
     engine.reset(engine.state.hiScore, engine.state.hiCoins);
     engine.start();
     gameOverFiredRef.current = false;
+    pendingGameOverRef.current = null;
     setIsMenuVisible(false);
     setShowShop(false);
     setShowSettings(false);
@@ -132,6 +138,7 @@ export default function Game() {
     engine.reset(engine.state.hiScore, engine.state.hiCoins);
     engine.start();
     gameOverFiredRef.current = false;
+    pendingGameOverRef.current = null;
     setIsMenuVisible(false);
     setShowShop(false);
     setShowSettings(false);
@@ -143,6 +150,7 @@ export default function Game() {
     const engine = engineRef.current!;
     engine.reset(engine.state.hiScore, engine.state.hiCoins);
     gameOverFiredRef.current = false;
+    pendingGameOverRef.current = null;
     setIsMenuVisible(true);
     setShowShop(false);
     setShowSettings(false);
@@ -218,12 +226,20 @@ export default function Game() {
         audio.stopMagnetHumRef.current();
         audio.stopMusicRef.current();
         store.addRunCoins(s.coinCount);
-        setGameOverData({
+        audio.playCrashSfxRef.current();
+        // Stash data; GameOverScreen is shown after the death animation finishes.
+        pendingGameOverRef.current = {
           score: s.score,
           coins: s.coinCount,
           hiScore: s.hiScore,
           hiCoins: s.hiCoins,
-        });
+        };
+      }
+
+      // Show the GameOverScreen once the death animation completes.
+      if (pendingGameOverRef.current !== null && s.deathAge >= DEATH_ANIM_DURATION) {
+        setGameOverData(pendingGameOverRef.current);
+        pendingGameOverRef.current = null;
       }
 
       //  Canvas rendering
@@ -294,6 +310,14 @@ export default function Game() {
           engine.isHolding,
           s.frameCount,
           engine.holdAge,
+          s.deathAge,
+        );
+
+        // Death particle burst (only visible after fatal collision).
+        p.deathParticles = updateAndDrawDeathParticles(
+          ctx,
+          p.deathParticles,
+          dtFactor,
         );
 
         drawShieldGlow(

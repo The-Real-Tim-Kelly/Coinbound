@@ -38,6 +38,8 @@ import {
   MAX_SHIELD_SHARDS,
   MAX_RARE_COIN_PARTICLES,
   MAX_FLOATING_TEXTS,
+  DEATH_ANIM_DURATION,
+  MAX_DEATH_PARTICLES,
 } from '../constants';
 import { makeInitialState } from '../logic/gameState';
 import { spawnObstacle } from '../logic/obstacles';
@@ -55,6 +57,7 @@ import type {
   ShieldShard,
   RareCoinParticle,
   FloatingText,
+  DeathParticle,
 } from '../types';
 
 // ─── Public interfaces ────────────────────────────────────────────────────────
@@ -72,6 +75,7 @@ export interface EngineConfig {
  */
 export interface EngineCallbacks {
   onRareCoinCollected: () => void;
+  onCoinCollected: () => void;
   onShieldPickedUp: () => void;
   onShieldBroken: () => void;
 }
@@ -84,6 +88,7 @@ export interface ParticleState {
   shieldShards: ShieldShard[];
   rareCoin: RareCoinParticle[];
   floatingTexts: FloatingText[];
+  deathParticles: DeathParticle[];
 }
 
 // ─── GameEngine ───────────────────────────────────────────────────────────────
@@ -115,6 +120,7 @@ export class GameEngine {
       shieldShards: [],
       rareCoin: [],
       floatingTexts: [],
+      deathParticles: [],
     };
   }
 
@@ -159,6 +165,7 @@ export class GameEngine {
     this.particles.shieldShards.length = 0;
     this.particles.rareCoin.length = 0;
     this.particles.floatingTexts.length = 0;
+    this.particles.deathParticles.length = 0;
   }
 
   /** Transition from "idle / menu" to active gameplay. */
@@ -188,6 +195,14 @@ export class GameEngine {
     // Background scroll advances only during active, non-game-over play.
     if (s.started && !s.gameOver) {
       this._bgOffset += s.speed * dtFactor;
+    }
+
+    // Tick death animation even after game over so the renderer can animate.
+    if (s.started && s.gameOver && s.deathAge > 0) {
+      s.deathAge = Math.min(
+        s.deathAge + dtFactor,
+        DEATH_ANIM_DURATION * 3, // cap to prevent unbounded growth
+      );
     }
 
     // Nothing else to update until the game is running.
@@ -336,6 +351,8 @@ export class GameEngine {
             '+5',
           );
           this._cb.onRareCoinCollected();
+        } else {
+          this._cb.onCoinCollected();
         }
       }
     }
@@ -385,7 +402,9 @@ export class GameEngine {
               this._cb.onShieldBroken();
             } else {
               s.gameOver = true;
+              s.deathAge = 0.01; // kick off death animation
               if (s.score > s.hiScore) s.hiScore = s.score;
+              this._spawnDeathParticles(pcx, pcy);
             }
             break collisionLoop;
           }
@@ -469,6 +488,26 @@ export class GameEngine {
         maxAge: 22 + Math.random() * 20,
         size: 1.5 + Math.random() * 3,
         hue: 200 + Math.random() * 60,
+      });
+    }
+  }
+
+  private _spawnDeathParticles(cx: number, cy: number): void {
+    const p = this.particles.deathParticles;
+    for (let i = 0; i < 22; i++) {
+      if (p.length >= MAX_DEATH_PARTICLES) break;
+      const ang = (i / 22) * Math.PI * 2 + Math.random() * 0.3;
+      const spd = 1.5 + Math.random() * 4.5;
+      p.push({
+        x: cx + (Math.random() - 0.5) * PLAYER_SIZE * 0.5,
+        y: cy + (Math.random() - 0.5) * PLAYER_SIZE * 0.5,
+        vx: Math.cos(ang) * spd,
+        vy: Math.sin(ang) * spd,
+        age: 0,
+        maxAge: 18 + Math.random() * 16,
+        size: 2 + Math.random() * 4,
+        // 60% red (0–20 hue), 40% orange (20–40 hue)
+        hue: Math.random() < 0.6 ? Math.random() * 20 : 20 + Math.random() * 20,
       });
     }
   }

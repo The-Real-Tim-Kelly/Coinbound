@@ -24,6 +24,7 @@ export function makeInitialState(hiScore = 0, hiCoins = 0): GameState {
     started: false,
     shieldActive: false,
     bounceAge: 0,
+    deathAge: 0,
     speed: INITIAL_SPEED,
     frameCount: 0,
     lastSpawn: -OBSTACLE_INTERVAL,

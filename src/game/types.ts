@@ -107,6 +107,17 @@ export interface FloatingText {
   maxAge: number;
 }
 
+export interface DeathParticle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  age: number;
+  maxAge: number;
+  size: number;
+  hue: number; // 0–40: red/orange spectrum
+}
+
 // ─── Obstacle types ───────────────────────────────────────────────────────────
 export type ObstacleKind = 'block' | 'bar' | 'spike' | 'diamond';
 
@@ -166,6 +177,7 @@ export interface GameState {
   started: boolean;
   shieldActive: boolean;
   bounceAge: number; // countdown for bounce animation frames
+  deathAge: number;  // frames since death (0 = alive, >0 = dying)
   speed: number;
   frameCount: number;
   lastSpawn: number;

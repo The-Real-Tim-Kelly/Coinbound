@@ -5,6 +5,7 @@ import type {
   ShieldShard,
   RareCoinParticle,
   FloatingText,
+  DeathParticle,
 } from '../types';
 
 export function updateAndDrawTrailParticles(
@@ -211,6 +212,39 @@ export function updateAndDrawFloatingTexts(
     ctx.strokeText(ft.text, 0, 0);
     ctx.fillStyle = '#ffaaff';
     ctx.fillText(ft.text, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+  return kept;
+}
+
+export function updateAndDrawDeathParticles(
+  ctx: CanvasRenderingContext2D,
+  particles: DeathParticle[],
+  dtFactor: number,
+): DeathParticle[] {
+  const kept: DeathParticle[] = [];
+  for (const p of particles) {
+    p.age += dtFactor;
+    if (p.age >= p.maxAge) continue;
+    p.x += p.vx * dtFactor;
+    p.y += p.vy * dtFactor;
+    p.vx *= Math.pow(0.91, dtFactor);
+    p.vy *= Math.pow(0.91, dtFactor);
+    kept.push(p);
+    const t = p.age / p.maxAge;
+    const alpha = (1 - t) * 0.95;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.shadowColor = `hsl(${p.hue},100%,65%)`;
+    ctx.shadowBlur = 10;
+    // Flash white at the very start, then fade to red/orange
+    ctx.fillStyle =
+      t < 0.18 ? '#ffffff' : `hsl(${p.hue},100%,${65 - t * 20}%)`;
+    const sz = p.size * (1 - t * 0.45);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, sz, 0, Math.PI * 2);
+    ctx.fill();
     ctx.globalAlpha = 1;
     ctx.restore();
   }

@@ -57,6 +57,10 @@ export const MAX_SHIELD_SHARDS = 30;
 export const MAX_RARE_COIN_PARTICLES = 60;
 export const MAX_FLOATING_TEXTS = 8;
 
+// ─── Death animation ────────────────────────────────────────────────────────
+export const DEATH_ANIM_DURATION = 26; // frames (~433 ms at 60 fps)
+export const MAX_DEATH_PARTICLES = 30;
+
 // ─── Audio ────────────────────────────────────────────────────────────────────
 export const MUSIC_BPM = 120; // synthwave tempo
 export const MUSIC_STEP_S = 60 / MUSIC_BPM / 4; // 16th-note duration in seconds

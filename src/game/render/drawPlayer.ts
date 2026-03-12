@@ -4,6 +4,7 @@ import {
   CANVAS_W,
   CANVAS_H,
   SHIELD_BOUNCE_DURATION,
+  DEATH_ANIM_DURATION,
 } from '../constants';
 import type { PlayerSkin, CosmeticType } from '../types';
 
@@ -250,19 +251,44 @@ export function drawPlayer(
   isHolding: boolean,
   frameCount: number,
   holdAge = 0,
+  deathAge = 0,
 ): void {
   ctx.save();
   ctx.translate(PLAYER_X + PLAYER_SIZE / 2, playerY + PLAYER_SIZE / 2);
   const tilt = Math.max(-0.35, Math.min(0.35, playerVY * 0.04));
   ctx.rotate(tilt);
-  // Briefly scale the cube up on touch-start then settle back — gives a
-  // tactile 'press' feel without affecting anything outside the cube bounds.
-  if (isHolding && holdAge < 10) {
+
+  if (deathAge > 0) {
+    // Death animation: shrink + fade over DEATH_ANIM_DURATION frames.
+    const t = Math.min(1, deathAge / DEATH_ANIM_DURATION);
+    ctx.globalAlpha = Math.max(0, 1 - t);
+    ctx.scale(Math.max(0.05, 1 - 0.95 * t), Math.max(0.05, 1 - 0.95 * t));
+  } else if (isHolding && holdAge < 10) {
+    // Touch-start scale pulse (existing behaviour).
     const scaleT = holdAge / 10;
     const touchScale = 1 + 0.1 * (1 - scaleT);
     ctx.scale(touchScale, touchScale);
   }
+
   drawPlayerShape(ctx, cosmeticType, skin, isHolding, frameCount, holdAge);
+
+  if (deathAge > 0) {
+    // Red flash overlay in the first 40 % of the animation.
+    const t = Math.min(1, deathAge / DEATH_ANIM_DURATION);
+    if (t < 0.4) {
+      const hs = PLAYER_SIZE / 2;
+      const flashAlpha = (1 - t / 0.4) * 0.8;
+      ctx.save();
+      ctx.globalAlpha = flashAlpha;
+      ctx.fillStyle = '#ff2020';
+      ctx.shadowColor = '#ff0000';
+      ctx.shadowBlur = 28;
+      ctx.fillRect(-hs, -hs, PLAYER_SIZE, PLAYER_SIZE);
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    }
+  }
+
   ctx.restore();
 }
 

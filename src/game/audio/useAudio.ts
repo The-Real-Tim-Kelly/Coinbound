@@ -16,6 +16,8 @@ import {
   playRareCoinPickupSfx,
   playShieldPickupSfx as playShieldPickupSfxFn,
   playShieldBreakSfx as playShieldBreakSfxFn,
+  playCoinPickupSfx as playCoinPickupSfxFn,
+  playCrashSfx as playCrashSfxFn,
 } from './sfx';
 
 interface UseAudioOptions {
@@ -45,6 +47,8 @@ export interface UseAudioReturn {
   playRareCoinSfxRef: React.MutableRefObject<() => void>;
   playShieldPickupSfxRef: React.MutableRefObject<() => void>;
   playShieldBreakSfxRef: React.MutableRefObject<() => void>;
+  playCoinSfxRef: React.MutableRefObject<() => void>;
+  playCrashSfxRef: React.MutableRefObject<() => void>;
 }
 
 export function useAudio({
@@ -85,6 +89,11 @@ export function useAudio({
   const playRareCoinSfxRef = useRef<() => void>(() => {});
   const playShieldPickupSfxRef = useRef<() => void>(() => {});
   const playShieldBreakSfxRef = useRef<() => void>(() => {});
+  const playCoinSfxRef = useRef<() => void>(() => {});
+  const playCrashSfxRef = useRef<() => void>(() => {});
+
+  // Rate-limiter for coin SFX: play at most once per 110 ms
+  const coinSfxCooldownRef = useRef<number>(0);
 
   // ── Internal helpers ─────────────────────────────────────────────────────
   const getOrCreateSfxGain = useCallback((ac: AudioContext): GainNode => {
@@ -404,6 +413,32 @@ export function useAudio({
     }
   }, [getOrCreateSfxGain]);
 
+  const playCoinSfx = useCallback(() => {
+    try {
+      if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+      const ac = audioCtxRef.current;
+      if (ac.state === 'suspended') void ac.resume();
+      // Rate-limit to prevent sound spam when collecting many coins per frame.
+      const now = ac.currentTime;
+      if (now - coinSfxCooldownRef.current < 0.11) return;
+      coinSfxCooldownRef.current = now;
+      playCoinPickupSfxFn(ac, getOrCreateSfxGain(ac));
+    } catch {
+      /* no-op */
+    }
+  }, [getOrCreateSfxGain]);
+
+  const playCrashSfx = useCallback(() => {
+    try {
+      if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+      const ac = audioCtxRef.current;
+      if (ac.state === 'suspended') void ac.resume();
+      playCrashSfxFn(ac, getOrCreateSfxGain(ac));
+    } catch {
+      /* no-op */
+    }
+  }, [getOrCreateSfxGain]);
+
   // ── Sync stable refs ──────────────────────────────────────────────────────
   useEffect(() => {
     startMusicRef.current = startMusic;
@@ -423,6 +458,12 @@ export function useAudio({
   useEffect(() => {
     playShieldBreakSfxRef.current = playShieldBreakSfx;
   }, [playShieldBreakSfx]);
+  useEffect(() => {
+    playCoinSfxRef.current = playCoinSfx;
+  }, [playCoinSfx]);
+  useEffect(() => {
+    playCrashSfxRef.current = playCrashSfx;
+  }, [playCrashSfx]);
 
   return {
     muted,
@@ -441,5 +482,7 @@ export function useAudio({
     playRareCoinSfxRef,
     playShieldPickupSfxRef,
     playShieldBreakSfxRef,
+    playCoinSfxRef,
+    playCrashSfxRef,
   };
 }
