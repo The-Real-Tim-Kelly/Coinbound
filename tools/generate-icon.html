@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Coinbound — Icon Generator</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0d0d1a;
+      color: #fff;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      gap: 20px;
+      padding: 24px;
+    }
+    h1 { color: #FFD700; font-size: 1.4rem; font-weight: 700; letter-spacing: 0.06em; }
+    .preview {
+      width: 256px;
+      height: 256px;
+      border-radius: 40px;
+      overflow: hidden;
+      box-shadow:
+        0 0 50px rgba(255, 180, 0, 0.35),
+        0 0 110px rgba(100, 0, 255, 0.20),
+        0 8px 32px rgba(0,0,0,0.7);
+    }
+    canvas { display: block; width: 100%; height: 100%; }
+    .pills { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+    .pill {
+      background: #1c1c38;
+      border: 1px solid #2e2e52;
+      padding: 4px 14px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      color: #9999cc;
+    }
+    .info { color: #6666aa; font-size: 0.82rem; }
+    button {
+      padding: 14px 36px;
+      background: linear-gradient(135deg, #FFB800, #FF6600);
+      border: none;
+      border-radius: 12px;
+      font-size: 1rem;
+      font-weight: 700;
+      color: #1a0800;
+      cursor: pointer;
+      letter-spacing: 0.03em;
+      box-shadow: 0 4px 24px rgba(255, 130, 0, 0.45);
+      transition: transform 0.1s, box-shadow 0.1s;
+    }
+    button:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(255, 130, 0, 0.65); }
+    button:active { transform: translateY(0); }
+  </style>
+</head>
+<body>
+  <h1>⭐ COINBOUND — ICON GENERATOR</h1>
+
+  <div class="preview">
+    <canvas id="c" width="1024" height="1024"></canvas>
+  </div>
+
+  <div class="pills">
+    <span class="pill">1024 × 1024 px</span>
+    <span class="pill">PNG</span>
+    <span class="pill">Play Store Ready</span>
+    <span class="pill">Adaptive Icon Source</span>
+  </div>
+
+  <div class="info">Preview at 256 px — download exports full 1024 px resolution.</div>
+
+  <button onclick="saveIcon()">⬇ Download coinbound-icon-1024.png</button>
+
+  <script>
+    const canvas = document.getElementById('c');
+    const ctx    = canvas.getContext('2d');
+    const W = 1024, H = 1024, CX = 512, CY = 512;
+    const TAU = Math.PI * 2;
+
+    // ─── HELPERS ─────────────────────────────────────────────────────────
+    function arc(x, y, r) {
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, TAU);
+    }
+
+    /** 4-point diamond sparkle star, path only */
+    function sparkle4Path(x, y, r) {
+      ctx.beginPath();
+      for (let i = 0; i < 4; i++) {
+        const oa = (i / 4) * TAU - Math.PI / 4;
+        const ia = oa + Math.PI / 4;
+        const ox = x + Math.cos(oa) * r;
+        const oy = y + Math.sin(oa) * r;
+        const ix = x + Math.cos(ia) * (r * 0.18);
+        const iy = y + Math.sin(ia) * (r * 0.18);
+        if (i === 0) ctx.moveTo(ox, oy); else ctx.lineTo(ox, oy);
+        ctx.lineTo(ix, iy);
+      }
+      ctx.closePath();
+    }
+
+    // ─── 1. BACKGROUND ───────────────────────────────────────────────────
+    function drawBackground() {
+      // Deep space gradient
+      const bg = ctx.createRadialGradient(CX, CY, 0, CX, CY, 660);
+      bg.addColorStop(0.00, '#1C0A44');
+      bg.addColorStop(0.45, '#0C0420');
+      bg.addColorStop(1.00, '#03010B');
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, W, H);
+
+      // Edge vignette
+      const vig = ctx.createRadialGradient(CX, CY, 200, CX, CY, 660);
+      vig.addColorStop(0, 'rgba(0,0,0,0)');
+      vig.addColorStop(1, 'rgba(0,0,0,0.6)');
+      ctx.fillStyle = vig;
+      ctx.fillRect(0, 0, W, H);
+
+      // Stars — fixed positions for deterministic output
+      const stars = [
+        [72,  95,  1.8], [194,  64, 2.2], [340,  88, 1.1], [698, 72, 1.9],
+        [887, 115, 1.6], [948, 342, 1.0], [975, 598, 1.7], [918,798, 2.0],
+        [798, 948, 1.1], [598, 976, 1.6], [198, 918, 2.1], [ 98,748, 1.0],
+        [58,  498, 1.6], [148, 198, 1.1], [748, 175, 1.0], [848,498, 1.6],
+        [450,  70, 1.0], [820,  68, 1.5], [974, 200, 1.0], [972,822, 1.7],
+        [820, 974, 1.1], [200, 974, 1.6], [900, 450, 1.2], [120,380, 1.5],
+        [680, 920, 1.3], [520, 40,  1.4], [30,  310, 1.5], [998,310, 1.3],
+      ];
+      ctx.fillStyle = 'rgba(255,255,255,0.78)';
+      for (const [x, y, r] of stars) {
+        arc(x, y, r);
+        ctx.fill();
+      }
+    }
+
+    // ─── 2. AMBIENT ENERGY GLOW ──────────────────────────────────────────
+    function drawAmbientGlow() {
+      // Purple pulse
+      const pg = ctx.createRadialGradient(CX, CY, 40, CX, CY, 560);
+      pg.addColorStop(0,   'rgba(95, 0, 210, 0.24)');
+      pg.addColorStop(0.4, 'rgba(50, 0, 140, 0.13)');
+      pg.addColorStop(1,   'rgba(0,  0,   0, 0)');
+      ctx.fillStyle = pg;
+      ctx.fillRect(0, 0, W, H);
+
+      // Warm coin bloom
+      const wg = ctx.createRadialGradient(CX, CY, 0, CX, CY, 500);
+      wg.addColorStop(0,   'rgba(255, 148, 0, 0.16)');
+      wg.addColorStop(0.45,'rgba(255,  80, 0, 0.08)');
+      wg.addColorStop(1,   'rgba(0,    0,  0, 0)');
+      ctx.fillStyle = wg;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    // ─── 3. ORBIT RINGS ──────────────────────────────────────────────────
+    /**
+     * Draw a glowing elliptical orbit ring.
+     * The ring is drawn in the coordinate system already translated to center,
+     * then rotated by `rotation` before drawing the ellipse.
+     */
+    function drawOrbitRing(rx, ry, rotation, colorRGB, glowColor, width, alpha) {
+      ctx.save();
+      ctx.translate(CX, CY);
+      ctx.rotate(rotation);
+      ctx.shadowColor = glowColor;
+
+      // Outer bloom pass
+      ctx.shadowBlur = 40;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, rx, ry, 0, 0, TAU);
+      ctx.strokeStyle = `rgba(${colorRGB}, ${alpha * 0.35})`;
+      ctx.lineWidth = width * 3.5;
+      ctx.stroke();
+
+      // Main ring pass
+      ctx.shadowBlur = 22;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, rx, ry, 0, 0, TAU);
+      ctx.strokeStyle = `rgba(${colorRGB}, ${alpha})`;
+      ctx.lineWidth = width;
+      ctx.stroke();
+
+      // Bright inner core
+      ctx.shadowBlur = 6;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, rx, ry, 0, 0, TAU);
+      ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.28})`;
+      ctx.lineWidth = width * 0.3;
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    function drawAllOrbitRings() {
+      ctx.shadowBlur = 0;
+      // Ring 1 — electric blue, tilted near-horizontal  (~20° from horizontal)
+      drawOrbitRing(448, 118, Math.PI * 0.11, '55, 95, 255',  '#3355FF', 7, 0.88);
+      // Ring 2 — violet, tilted near-vertical (~20° from vertical)
+      drawOrbitRing(118, 438, -Math.PI * 0.08,'135, 35, 255',  '#8822FF', 6, 0.78);
+      // Ring 3 — cyan accent, diagonal (narrow ellipse at ~65°)
+      drawOrbitRing(412, 88, Math.PI * 0.36, '0, 195, 255',  '#00CCFF', 5, 0.62);
+      ctx.shadowBlur = 0;
+    }
+
+    // ─── 4. COIN ─────────────────────────────────────────────────────────
+    function drawCoin() {
+      const R = 292;
+
+      // ── Layered outer glow bloom ──
+      ctx.shadowBlur = 0;
+      for (let i = 6; i >= 1; i--) {
+        const gR  = R + i * 20;
+        const a   = 0.04 + (7 - i) * 0.018;
+        const grd = ctx.createRadialGradient(CX, CY, R - 30, CX, CY, gR);
+        grd.addColorStop(0, `rgba(255, 165, 0, ${a})`);
+        grd.addColorStop(1, 'rgba(255, 100, 0, 0)');
+        ctx.fillStyle = grd;
+        ctx.fillRect(0, 0, W, H);
+      }
+
+      // ── Outer metal rim ──
+      ctx.shadowBlur = 48;
+      ctx.shadowColor = '#FFAA00';
+      arc(CX, CY, R);
+      const rimGrd = ctx.createLinearGradient(CX - R, CY - R, CX + R, CY + R);
+      rimGrd.addColorStop(0.0, '#9A6800');
+      rimGrd.addColorStop(0.5, '#5C3600');
+      rimGrd.addColorStop(1.0, '#3A1E00');
+      ctx.fillStyle = rimGrd;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // ── Coin face ──
+      const faceR = R - 16;
+      // Gradient: light top-left → dark bottom-right (simulates directional light)
+      const fg = ctx.createRadialGradient(CX - 80, CY - 92, 12, CX + 40, CY + 55, faceR + 30);
+      fg.addColorStop(0.00, '#FFF162');   // specular highlight
+      fg.addColorStop(0.10, '#FFD700');   // pure gold
+      fg.addColorStop(0.42, '#FFAF00');   // warm gold
+      fg.addColorStop(0.73, '#E07600');   // deep orange-gold
+      fg.addColorStop(1.00, '#7A3C00');   // dark edge
+      arc(CX, CY, faceR);
+      ctx.fillStyle = fg;
+      ctx.fill();
+
+      // ── Bevel rim highlight (top-left arch) ──
+      ctx.beginPath();
+      ctx.arc(CX, CY, R - 8, Math.PI * 1.10, Math.PI * 1.90);
+      ctx.strokeStyle = 'rgba(255, 248, 185, 0.68)';
+      ctx.lineWidth = 13;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+
+      // ── Bevel rim shadow (bottom-right arch) ──
+      ctx.beginPath();
+      ctx.arc(CX, CY, R - 8, Math.PI * 0.10, Math.PI * 0.90);
+      ctx.strokeStyle = 'rgba(35, 12, 0, 0.52)';
+      ctx.lineWidth = 13;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+
+      // ── Inner engraved groove ring ──
+      arc(CX, CY, R - 56);
+      ctx.strokeStyle = 'rgba(55, 24, 0, 0.46)';
+      ctx.lineWidth = 6;
+      ctx.stroke();
+
+      arc(CX, CY, R - 59);
+      ctx.strokeStyle = 'rgba(255, 212, 88, 0.30)';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      // ── Symbol ──
+      drawCoinSymbol();
+
+      // ── Specular shine (top-left white glare) ──
+      const shine = ctx.createRadialGradient(CX - 90, CY - 100, 0, CX - 90, CY - 100, 230);
+      shine.addColorStop(0.00, 'rgba(255, 255, 255, 0.52)');
+      shine.addColorStop(0.28, 'rgba(255, 252, 200, 0.20)');
+      shine.addColorStop(0.55, 'rgba(255, 240, 150, 0.06)');
+      shine.addColorStop(1.00, 'rgba(255, 255, 255, 0)');
+      ctx.save();
+      arc(CX, CY, faceR);
+      ctx.clip();
+      ctx.fillStyle = shine;
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+    }
+
+    // ─── 5. COIN SYMBOL (GRAVITY-FLIP ARROWS) ────────────────────────────
+    function drawCoinSymbol() {
+      ctx.save();
+      ctx.translate(CX, CY);
+
+      const halfW  = 54;   // half-width of arrow base
+      const tipY   = 112;  // tip distance from center (on coin face, within inner groove)
+      const baseY  = 52;   // base (flat edge) distance from center
+
+      // Recessed fill — slightly darker than gold face to appear engraved
+      const fill      = 'rgba(72, 34, 0, 0.62)';
+      const edgeLight = 'rgba(255, 200, 60, 0.32)';
+      const edgeDark  = 'rgba(18,  7,  0, 0.30)';
+
+      function drawArrow(up) {
+        const s = up ? -1 : 1;
+        ctx.beginPath();
+        ctx.moveTo(0,      s * tipY);
+        ctx.lineTo(-halfW, s * baseY);
+        ctx.lineTo( halfW, s * baseY);
+        ctx.closePath();
+        ctx.fillStyle = fill;
+        ctx.fill();
+
+        // Raised edge light on the two diagonal sides
+        ctx.beginPath();
+        ctx.moveTo(0, s * tipY);
+        ctx.lineTo(s * halfW * (up ? -1 : 1), s * baseY);
+        ctx.strokeStyle = edgeLight;
+        ctx.lineWidth   = 2.5;
+        ctx.lineJoin    = 'round';
+        ctx.lineCap     = 'round';
+        ctx.stroke();
+
+        // Shadow on the horizontal base
+        ctx.beginPath();
+        ctx.moveTo(-halfW, s * baseY);
+        ctx.lineTo( halfW, s * baseY);
+        ctx.strokeStyle = edgeDark;
+        ctx.lineWidth   = 2;
+        ctx.stroke();
+      }
+
+      drawArrow(true);   // ▲ upward
+      drawArrow(false);  // ▼ downward
+
+      // Center glow dot between the two arrows
+      const dotG = ctx.createRadialGradient(0, 0, 0, 0, 0, 14);
+      dotG.addColorStop(0, 'rgba(255, 238, 100, 0.55)');
+      dotG.addColorStop(1, 'rgba(255, 210, 50,  0)');
+      arc(0, 0, 14);
+      ctx.fillStyle = dotG;
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    // ─── 6. SPARKLES ─────────────────────────────────────────────────────
+    function drawSparkles() {
+      // Gold sparkles — around coin orbit radius
+      const goldList = [
+        [CX + 328, CY - 108, 14],
+        [CX - 342, CY +  98, 12],
+        [CX +  88, CY - 342, 13],
+        [CX -  98, CY + 338, 11],
+        [182, 248, 12],
+        [838, 198, 10],
+        [872, 742, 12],
+        [168, 782, 11],
+        [782, 858,  9],
+        [240, 155,  8],
+      ];
+      // Blue/violet sparkles
+      const blueList = [
+        [348, 158,  9],
+        [692, 152,  9],
+        [898, 542, 10],
+        [132, 448,  9],
+        [CX + 278, CY + 242, 8],
+        [CX - 268, CY - 252, 7],
+        [CX - 310, CY + 155, 8],
+      ];
+
+      ctx.save();
+      for (const [x, y, r] of goldList) {
+        ctx.shadowBlur = 16;
+        ctx.shadowColor = '#FFAA00';
+        ctx.fillStyle   = '#FFE055';
+        sparkle4Path(x, y, r);
+        ctx.fill();
+      }
+      for (const [x, y, r] of blueList) {
+        ctx.shadowBlur = 14;
+        ctx.shadowColor = '#5577FF';
+        ctx.fillStyle   = '#AADDFF';
+        sparkle4Path(x, y, r);
+        ctx.fill();
+      }
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    }
+
+    // ─── 7. FLOATING PARTICLES ───────────────────────────────────────────
+    function drawParticles() {
+      const list = [
+        // x,           y,           r,   fill,        glow
+        [CX + 218, CY - 252, 4.5, '#FFC030', '#FF9800'],
+        [CX - 252, CY + 228, 3.5, '#FFB820', '#FF8800'],
+        [CX + 268, CY + 212, 4.0, '#FFAA00', '#FF7700'],
+        [CX - 228, CY - 248, 4.5, '#FFD040', '#FFB000'],
+        [CX + 188, CY + 288, 3.0, '#88BBFF', '#4488FF'],
+        [CX - 292, CY - 132, 3.5, '#AA66FF', '#7733EE'],
+        [CX + 338, CY -  22, 3.0, '#66AAFF', '#3366EE'],
+        [CX - 345, CY +  48, 3.5, '#BB77FF', '#8844EE'],
+        [CX +  98, CY - 348, 3.0, '#FFD040', '#FFB000'],
+        [CX - 108, CY + 358, 3.5, '#FFB820', '#FF9000'],
+        [CX + 295, CY - 188, 2.5, '#99CCFF', '#4488EE'],
+        [CX - 182, CY + 302, 2.5, '#88AAFF', '#3366DD'],
+      ];
+
+      ctx.save();
+      for (const [x, y, r, fill, glow] of list) {
+        ctx.shadowBlur  = 12;
+        ctx.shadowColor = glow;
+        ctx.fillStyle   = fill;
+        arc(x, y, r);
+        ctx.fill();
+      }
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    }
+
+    // ─── RENDER ──────────────────────────────────────────────────────────
+    function render() {
+      ctx.clearRect(0, 0, W, H);
+      ctx.shadowBlur = 0;
+      ctx.lineCap    = 'round';
+      ctx.lineJoin   = 'round';
+
+      drawBackground();
+      drawAmbientGlow();
+      drawAllOrbitRings();
+      drawCoin();
+      drawSparkles();
+      drawParticles();
+    }
+
+    function saveIcon() {
+      render();
+      const link     = document.createElement('a');
+      link.download  = 'coinbound-icon-1024.png';
+      link.href      = canvas.toDataURL('image/png');
+      link.click();
+    }
+
+    render();
+  </script>
+</body>
+</html>
