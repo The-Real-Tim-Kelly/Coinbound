@@ -4,6 +4,8 @@ import {
   MAGNET_COSTS,
   LUCKY_CHARM_MAX_LEVEL,
   LUCKY_CHARM_COSTS,
+  POWER_SURGE_MAX_LEVEL,
+  POWER_SURGE_COSTS,
 } from '../constants';
 import { CosmeticType } from '../types';
 
@@ -17,8 +19,11 @@ export interface UseStoreReturn {
   magnetLevelRef: React.MutableRefObject<number>;
   luckyCharmLevel: number;
   luckyCharmLevelRef: React.MutableRefObject<number>;
+  powerSurgeLevel: number;
+  powerSurgeLevelRef: React.MutableRefObject<number>;
   buyMagnetUpgrade: () => void;
   buyLuckyCharmUpgrade: () => void;
+  buyPowerSurgeUpgrade: () => void;
   // Cosmetics equip state (React state for UI)
   activeSkin: string;
   activeTrail: string;
@@ -97,6 +102,24 @@ export function useStore(): UseStoreReturn {
     setTotalCoins(totalCoinsRef.current - cost);
   }, [setTotalCoins]);
 
+  // ── Power Surge upgrade ──────────────────────────────────────────────────
+  const powerSurgeLevelRef = useRef(lsInt('coinbound_power_surge_level', 0));
+  const [powerSurgeLevel, setPowerSurgeLevelState] = useState(
+    powerSurgeLevelRef.current,
+  );
+
+  const buyPowerSurgeUpgrade = useCallback(() => {
+    const level = powerSurgeLevelRef.current;
+    if (level >= POWER_SURGE_MAX_LEVEL) return;
+    const cost = POWER_SURGE_COSTS[level];
+    if (totalCoinsRef.current < cost) return;
+    const newLevel = level + 1;
+    powerSurgeLevelRef.current = newLevel;
+    localStorage.setItem('coinbound_power_surge_level', String(newLevel));
+    setPowerSurgeLevelState(newLevel);
+    setTotalCoins(totalCoinsRef.current - cost);
+  }, [setTotalCoins]);
+
   // ── Active cosmetics (dual ref + state pattern) ───────────────────────────
   const activeSkinRef = useRef(ls('coinbound_active_skin', 'default'));
   const [activeSkin, setActiveSkinState] = useState(activeSkinRef.current);
@@ -172,8 +195,11 @@ export function useStore(): UseStoreReturn {
     magnetLevelRef,
     luckyCharmLevel,
     luckyCharmLevelRef,
+    powerSurgeLevel,
+    powerSurgeLevelRef,
     buyMagnetUpgrade,
     buyLuckyCharmUpgrade,
+    buyPowerSurgeUpgrade,
     activeSkin,
     activeTrail,
     activeBg,

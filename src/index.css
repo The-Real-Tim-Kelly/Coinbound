@@ -8,6 +8,11 @@
      full-screen container div does not flash blue on every touch. Visual
      touch feedback is handled by the canvas cube pulse instead. */
   -webkit-tap-highlight-color: transparent;
+  /* Prevent iOS from showing the text-selection / copy-paste callout when
+     the player spams taps or holds a finger on the screen. */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 html,

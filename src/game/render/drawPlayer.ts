@@ -4,7 +4,9 @@ import {
   CANVAS_W,
   CANVAS_H,
   SHIELD_BOUNCE_DURATION,
+  BREAKER_FLASH_DURATION,
   DEATH_ANIM_DURATION,
+  INVINCIBILITY_BLINK_START,
 } from '../constants';
 import type { PlayerSkin, CosmeticType } from '../types';
 
@@ -252,7 +254,15 @@ export function drawPlayer(
   frameCount: number,
   holdAge = 0,
   deathAge = 0,
+  invincibilityActive = false,
+  invincibilityTimer = 0,
 ): void {
+  // Blink: in the last INVINCIBILITY_BLINK_START frames, hide every other 4-frame slot.
+  if (invincibilityActive && invincibilityTimer <= INVINCIBILITY_BLINK_START) {
+    const blinkCycle = Math.floor(invincibilityTimer / 4) % 2;
+    if (blinkCycle === 0) return; // invisible frame — skip drawing
+  }
+
   ctx.save();
   ctx.translate(PLAYER_X + PLAYER_SIZE / 2, playerY + PLAYER_SIZE / 2);
   const tilt = Math.max(-0.35, Math.min(0.35, playerVY * 0.04));
@@ -263,6 +273,9 @@ export function drawPlayer(
     const t = Math.min(1, deathAge / DEATH_ANIM_DURATION);
     ctx.globalAlpha = Math.max(0, 1 - t);
     ctx.scale(Math.max(0.05, 1 - 0.95 * t), Math.max(0.05, 1 - 0.95 * t));
+  } else if (invincibilityActive) {
+    // Ghost mode: translucent player with a cyan tint.
+    ctx.globalAlpha = 0.38;
   } else if (isHolding && holdAge < 10) {
     // Touch-start scale pulse (existing behaviour).
     const scaleT = holdAge / 10;
@@ -287,6 +300,20 @@ export function drawPlayer(
       ctx.shadowBlur = 0;
       ctx.restore();
     }
+  }
+
+  if (invincibilityActive) {
+    // Cyan ghost overlay — sits on top of the sprite, only visible when the
+    // overall globalAlpha is already low from the ghost-mode setting above.
+    const hs = PLAYER_SIZE / 2;
+    ctx.save();
+    ctx.globalAlpha = 0.55;
+    ctx.fillStyle = 'rgba(0,230,220,0.55)';
+    ctx.shadowColor = '#00ffdd';
+    ctx.shadowBlur = 16;
+    ctx.fillRect(-hs, -hs, PLAYER_SIZE, PLAYER_SIZE);
+    ctx.shadowBlur = 0;
+    ctx.restore();
   }
 
   ctx.restore();
@@ -526,5 +553,237 @@ export function drawShieldHudIndicator(
   ctx.textBaseline = 'middle';
   ctx.fillText('SH', CANVAS_W - 22, 62);
   ctx.textBaseline = 'alphabetic';
+  ctx.restore();
+}
+
+// ─── Orange flash overlay when Breaker destroys an obstacle ─────────────────────
+export function drawBreakerFlash(
+  ctx: CanvasRenderingContext2D,
+  breakerFlashAge: number,
+): void {
+  if (breakerFlashAge <= 0) return;
+  const flashA = (breakerFlashAge / BREAKER_FLASH_DURATION) * 0.48;
+  ctx.save();
+  ctx.fillStyle = `rgba(255,130,0,${flashA.toFixed(3)})`;
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  ctx.restore();
+}
+
+// ─── Breaker active aura around player ──────────────────────────────────────
+// Drawn before the player so it sits behind the sprite but in front of trails.
+export function drawBreakerAura(
+  ctx: CanvasRenderingContext2D,
+  playerCX: number,
+  playerCY: number,
+  breakerActive: boolean,
+  frameCount: number,
+): void {
+  if (!breakerActive) return;
+
+  const pulse = 0.6 + Math.sin(frameCount * 0.25) * 0.4;
+  const baseR = PLAYER_SIZE * 0.74;
+
+  ctx.save();
+
+  // Outer radial glow halo
+  const outerGrad = ctx.createRadialGradient(
+    playerCX,
+    playerCY,
+    baseR - 2,
+    playerCX,
+    playerCY,
+    baseR + 20,
+  );
+  outerGrad.addColorStop(0, `rgba(255,110,0,${(0.3 * pulse).toFixed(3)})`);
+  outerGrad.addColorStop(1, 'rgba(255,60,0,0)');
+  ctx.fillStyle = outerGrad;
+  ctx.beginPath();
+  ctx.arc(playerCX, playerCY, baseR + 20, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Solid ring
+  ctx.shadowColor = '#ff6600';
+  ctx.shadowBlur = 22 * pulse;
+  ctx.strokeStyle = `rgba(255,150,30,${(0.95 * pulse).toFixed(3)})`;
+  ctx.lineWidth = 2.8;
+  ctx.beginPath();
+  ctx.arc(playerCX, playerCY, baseR, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Inner spinning dashed ring (rotates opposite direction to shield)
+  ctx.shadowBlur = 0;
+  ctx.setLineDash([4, 5]);
+  ctx.lineDashOffset = frameCount * 2.5;
+  ctx.strokeStyle = `rgba(255,215,60,${(0.7 * pulse).toFixed(3)})`;
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.arc(playerCX, playerCY, baseR - 8, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.lineDashOffset = 0;
+
+  // Eight orbiting spark nodes
+  const numSparks = 8;
+  for (let i = 0; i < numSparks; i++) {
+    const angle = (i / numSparks) * Math.PI * 2 + frameCount * 0.045;
+    const sx = playerCX + Math.cos(angle) * baseR;
+    const sy = playerCY + Math.sin(angle) * baseR;
+    const sparkAlpha = 0.5 + Math.sin(frameCount * 0.32 + i * 0.8) * 0.5;
+    ctx.fillStyle = `rgba(255,230,90,${sparkAlpha.toFixed(3)})`;
+    ctx.shadowColor = '#ffaa00';
+    ctx.shadowBlur = 9;
+    ctx.beginPath();
+    ctx.arc(sx, sy, 2.8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.shadowBlur = 0;
+  ctx.restore();
+}
+
+// ─── Breaker active HUD indicator ───────────────────────────────────────────
+export function drawBreakerHudIndicator(
+  ctx: CanvasRenderingContext2D,
+  breakerActive: boolean,
+  frameCount: number,
+): void {
+  if (!breakerActive) return;
+  const bPulse = 0.7 + Math.sin(frameCount * 0.18) * 0.3;
+  ctx.save();
+  ctx.shadowColor = '#ff7700';
+  ctx.shadowBlur = 12 * bPulse;
+  ctx.fillStyle = `rgba(255,120,0,${bPulse.toFixed(3)})`;
+  ctx.beginPath();
+  ctx.arc(CANVAS_W - 22, 79, 7, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.font = 'bold 9px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('BR', CANVAS_W - 22, 79);
+  ctx.textBaseline = 'alphabetic';
+  ctx.restore();
+}
+
+// ─── Invincibility ghost aura around player ──────────────────────────────────
+export function drawInvincibilityAura(
+  ctx: CanvasRenderingContext2D,
+  playerCX: number,
+  playerCY: number,
+  invincibilityActive: boolean,
+  invincibilityTimer: number,
+  frameCount: number,
+): void {
+  if (!invincibilityActive) return;
+
+  const pulse = 0.55 + Math.sin(frameCount * 0.2) * 0.45;
+  const baseR = PLAYER_SIZE * 0.8;
+
+  // Fade out in last INVINCIBILITY_BLINK_START frames
+  const fadeAlpha =
+    invincibilityTimer <= INVINCIBILITY_BLINK_START
+      ? invincibilityTimer / INVINCIBILITY_BLINK_START
+      : 1;
+
+  ctx.save();
+
+  // Outer diffuse halo
+  const outerGrad = ctx.createRadialGradient(
+    playerCX,
+    playerCY,
+    baseR,
+    playerCX,
+    playerCY,
+    baseR + 22,
+  );
+  outerGrad.addColorStop(
+    0,
+    `rgba(0,220,210,${(0.28 * pulse * fadeAlpha).toFixed(3)})`,
+  );
+  outerGrad.addColorStop(1, 'rgba(0,180,200,0)');
+  ctx.fillStyle = outerGrad;
+  ctx.beginPath();
+  ctx.arc(playerCX, playerCY, baseR + 22, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Solid pulsing ring
+  ctx.shadowColor = '#00ffee';
+  ctx.shadowBlur = 20 * pulse * fadeAlpha;
+  ctx.strokeStyle = `rgba(0,240,220,${(0.9 * pulse * fadeAlpha).toFixed(3)})`;
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.arc(playerCX, playerCY, baseR, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Inner spinning dashed ring
+  ctx.shadowBlur = 0;
+  ctx.setLineDash([5, 4]);
+  ctx.lineDashOffset = -(frameCount * 2.2);
+  ctx.strokeStyle = `rgba(160,255,245,${(0.65 * pulse * fadeAlpha).toFixed(3)})`;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(playerCX, playerCY, baseR - 7, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.lineDashOffset = 0;
+
+  // Six orbiting ghost motes
+  const numMotes = 6;
+  for (let i = 0; i < numMotes; i++) {
+    const angle = (i / numMotes) * Math.PI * 2 + frameCount * 0.055;
+    const mx = playerCX + Math.cos(angle) * baseR;
+    const my = playerCY + Math.sin(angle) * baseR;
+    const moteAlpha =
+      (0.5 + Math.sin(frameCount * 0.3 + i * 1.05) * 0.5) * fadeAlpha;
+    ctx.fillStyle = `rgba(180,255,245,${moteAlpha.toFixed(3)})`;
+    ctx.shadowColor = '#00eedd';
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.arc(mx, my, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.shadowBlur = 0;
+  ctx.restore();
+}
+
+// ─── Invincibility active HUD indicator ──────────────────────────────────────
+export function drawInvincibilityHudIndicator(
+  ctx: CanvasRenderingContext2D,
+  invincibilityActive: boolean,
+  invincibilityTimer: number,
+  invincibilityDuration: number,
+  frameCount: number,
+): void {
+  if (!invincibilityActive) return;
+  const iPulse = 0.7 + Math.sin(frameCount * 0.2) * 0.3;
+  ctx.save();
+  ctx.shadowColor = '#00ffee';
+  ctx.shadowBlur = 12 * iPulse;
+  ctx.fillStyle = `rgba(0,220,200,${iPulse.toFixed(3)})`;
+  ctx.beginPath();
+  ctx.arc(CANVAS_W - 22, 96, 7, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.font = 'bold 9px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('GH', CANVAS_W - 22, 96);
+  ctx.textBaseline = 'alphabetic';
+
+  // Tiny countdown arc drawn around the dot
+  const arcFrac = Math.max(0, invincibilityTimer / invincibilityDuration);
+  ctx.strokeStyle = `rgba(0,255,230,${(0.85 * iPulse).toFixed(3)})`;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(
+    CANVAS_W - 22,
+    96,
+    9,
+    -Math.PI / 2,
+    -Math.PI / 2 + arcFrac * Math.PI * 2,
+  );
+  ctx.stroke();
   ctx.restore();
 }

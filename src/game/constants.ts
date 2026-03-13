@@ -16,28 +16,50 @@ export const OBSTACLE_INTERVAL = 75; // frames between spawns
 export const MIN_OBSTACLE_SPACING = 195; // px clear before next spawn
 
 // ─── Gap sizing ───────────────────────────────────────────────────────────────
-export const GAP_MIN = PLAYER_SIZE + 20; // absolute floor: player always fits (54 px)
-export const GAP_NORMAL_MIN = 175;
+export const GAP_MIN = PLAYER_SIZE + 28; // absolute floor: player always fits (62 px)
+export const GAP_NORMAL_MIN = 190;
 export const GAP_NORMAL_MAX = 285;
-export const GAP_NARROW_MIN = PLAYER_SIZE + 20; // challenge gap lower bound
-export const GAP_NARROW_MAX = 148; // challenge gap upper bound
+export const GAP_NARROW_MIN = PLAYER_SIZE + 28; // challenge gap lower bound
+export const GAP_NARROW_MAX = 160; // challenge gap upper bound
 export const GAP_NARROW_CHANCE = 0.15; // 15 % of spawns are challenge gaps
 export const MIN_SLAB_H = 50; // thinnest a wall slab may be
 
 // ─── Coins ────────────────────────────────────────────────────────────────────
 export const COIN_RADIUS = 10;
-export const COIN_INTERVAL = 120;
-export const RARE_COIN_CHANCE = 0.12;
+export const COIN_INTERVAL = 145;
+export const RARE_COIN_CHANCE_MIN = 0.04; // chance at game start
+export const RARE_COIN_CHANCE_MAX = 0.22; // maximum chance (reached over time)
+export const RARE_COIN_CHANCE_GROWTH = 0.00004; // per-frame chance increase
 export const RARE_COIN_VALUE = 5;
 export const SPAWN_SAFE_MARGIN = 18;
 export const MAX_SPAWN_ATTEMPTS = 30;
 
 // ─── Shield power-up ─────────────────────────────────────────────────────────
 export const SHIELD_RADIUS = 13;
-export const SHIELD_INTERVAL = 420; // frames between shield spawns (rare)
+export const SHIELD_INTERVAL_MIN = 1080; // ~18 s at 60 fps
+export const SHIELD_INTERVAL_MAX = 1680; // ~28 s at 60 fps
 export const SHIELD_BOUNCE_VY = 9; // vertical speed when shield bounces player
-export const SHIELD_BOUNCE_PUSHBACK = 190; // px to push all obstacles rightward
+export const SHIELD_BOUNCE_PUSHBACK = 260; // px to push all obstacles rightward
 export const SHIELD_BOUNCE_DURATION = 38; // frames of bounce flash + shake
+
+// ─── Breaker power-up ─────────────────────────────────────────────────────────
+export const BREAKER_RADIUS = 13;
+export const BREAKER_INTERVAL_MIN = 1620; // ~27 s at 60 fps
+export const BREAKER_INTERVAL_MAX = 2400; // ~40 s at 60 fps
+export const BREAKER_FLASH_DURATION = 30; // frames of orange flash on obstacle break
+
+// ─── Invincibility power-up ───────────────────────────────────────────────────
+export const INVINCIBILITY_RADIUS = 13;
+export const INVINCIBILITY_INTERVAL_MIN = 1440; // ~24 s at 60 fps
+export const INVINCIBILITY_INTERVAL_MAX = 2100; // ~35 s at 60 fps
+export const INVINCIBILITY_DURATION = 420; // frames the effect lasts (~7 s at 60 fps)
+export const INVINCIBILITY_BLINK_START = 90; // frames before end when player starts blinking (~1.5 s warning)
+
+// ─── Power-up global cooldown ─────────────────────────────────────────────────
+// Randomised gap between any two power-up spawns — prevents clustering while
+// keeping each run feel slightly different.
+export const POWER_UP_GLOBAL_COOLDOWN_MIN = 360; // ~6 s at 60 fps
+export const POWER_UP_GLOBAL_COOLDOWN_MAX = 600; // ~10 s at 60 fps
 
 // ─── Upgrades ────────────────────────────────────────────────────────────────
 export const MAGNET_MAX_LEVEL = 5;
@@ -49,6 +71,12 @@ export const LUCKY_CHARM_COSTS = [15, 35, 75, 150, 300];
 export const LUCKY_CHARM_BONUS_PER_LEVEL = 0.15; // +15% extra-spawn chance per level
 export const LUCKY_COIN_CHECK_INTERVAL = 55; // frames between bonus spawn roll checks
 
+export const POWER_SURGE_MAX_LEVEL = 5;
+export const POWER_SURGE_COSTS = [25, 60, 120, 250, 500];
+// Each level reduces power-up spawn intervals by 8% (multiplicative).
+// At max level the factor is 0.60, keeping power-ups rare but more accessible.
+export const POWER_SURGE_INTERVAL_REDUCTION_PER_LEVEL = 0.08;
+
 // ─── Particle caps (limits simultaneous particles to avoid mobile lag) ────────
 export const MAX_TRAIL_PARTICLES = 80;
 export const MAX_MAG_PARTICLES = 40;
@@ -56,6 +84,7 @@ export const MAX_CEIL_PARTICLES = 30;
 export const MAX_SHIELD_SHARDS = 30;
 export const MAX_RARE_COIN_PARTICLES = 60;
 export const MAX_FLOATING_TEXTS = 8;
+export const MAX_BREAKER_PARTICLES = 80;
 
 // ─── Death animation ────────────────────────────────────────────────────────
 export const DEATH_ANIM_DURATION = 26; // frames (~433 ms at 60 fps)

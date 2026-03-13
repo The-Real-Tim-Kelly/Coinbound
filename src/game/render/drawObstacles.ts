@@ -42,6 +42,7 @@ export function drawObstacles(
   obstacles: Obstacle[],
 ): void {
   for (const obs of obstacles) {
+    if (obs.destroyed) continue;
     ctx.save();
     ctx.shadowColor = obs.color;
     ctx.shadowBlur = 10;

@@ -15,7 +15,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 //  Constants
-import { CANVAS_W, CANVAS_H, PLAYER_X, PLAYER_SIZE, DEATH_ANIM_DURATION } from './constants';
+import {
+  CANVAS_W,
+  CANVAS_H,
+  PLAYER_X,
+  PLAYER_SIZE,
+  DEATH_ANIM_DURATION,
+  INVINCIBILITY_DURATION,
+} from './constants';
 
 //  Engine
 import { GameEngine } from './engine/GameEngine';
@@ -35,16 +42,23 @@ import {
   updateAndDrawRareCoinParticles,
   updateAndDrawFloatingTexts,
   updateAndDrawDeathParticles,
+  updateAndDrawBreakerParticles,
+  updateAndDrawGhostParticles,
 } from './render/drawParticles';
 import {
   drawPlayer,
   drawMagnetField,
   drawCeilingGlow,
   drawShieldGlow,
+  drawBreakerAura,
   drawElectricArc,
   applyScreenShake,
   drawBounceFlash,
   drawShieldHudIndicator,
+  drawBreakerFlash,
+  drawBreakerHudIndicator,
+  drawInvincibilityAura,
+  drawInvincibilityHudIndicator,
 } from './render/drawPlayer';
 import { drawHUD } from './render/drawHUD';
 
@@ -83,11 +97,11 @@ export default function Game() {
   const audio = useAudio({
     initialMuted: localStorage.getItem('coinbound_muted') === 'true',
     initialMusicVolume: parseInt(
-      localStorage.getItem('coinbound_music_volume') ?? '70',
+      localStorage.getItem('coinbound_music_volume') ?? '50',
       10,
     ),
     initialSfxVolume: parseInt(
-      localStorage.getItem('coinbound_sfx_volume') ?? '80',
+      localStorage.getItem('coinbound_sfx_volume') ?? '65',
       10,
     ),
   });
@@ -99,6 +113,7 @@ export default function Game() {
       {
         magnetLevel: store.magnetLevelRef.current,
         luckyCharmLevel: store.luckyCharmLevelRef.current,
+        powerSurgeLevel: store.powerSurgeLevelRef.current,
         activeTrail: store.activeTrailRef.current,
       },
       {
@@ -108,6 +123,10 @@ export default function Game() {
         onCoinCollected: () => audio.playCoinSfxRef.current(),
         onShieldPickedUp: () => audio.playShieldPickupSfxRef.current(),
         onShieldBroken: () => audio.playShieldBreakSfxRef.current(),
+        onBreakerPickedUp: () => audio.playBreakerPickupSfxRef.current(),
+        onBreakerUsed: () => audio.playBreakerUsedSfxRef.current(),
+        onInvincibilityPickedUp: () =>
+          audio.playInvincibilityPickupSfxRef.current(),
       },
     );
   }
@@ -203,6 +222,7 @@ export default function Game() {
       engine.updateConfig({
         magnetLevel: store.magnetLevelRef.current,
         luckyCharmLevel: store.luckyCharmLevelRef.current,
+        powerSurgeLevel: store.powerSurgeLevelRef.current,
         activeTrail: store.activeTrailRef.current,
       });
 
@@ -237,7 +257,10 @@ export default function Game() {
       }
 
       // Show the GameOverScreen once the death animation completes.
-      if (pendingGameOverRef.current !== null && s.deathAge >= DEATH_ANIM_DURATION) {
+      if (
+        pendingGameOverRef.current !== null &&
+        s.deathAge >= DEATH_ANIM_DURATION
+      ) {
         setGameOverData(pendingGameOverRef.current);
         pendingGameOverRef.current = null;
       }
@@ -262,7 +285,14 @@ export default function Game() {
         // Screen shake  saves ctx; restore called after shaken draws.
         const shaking = applyScreenShake(ctx, s.bounceAge);
 
-        drawCoins(ctx, s.coins, s.shieldPickups, s.frameCount);
+        drawCoins(
+          ctx,
+          s.coins,
+          s.shieldPickups,
+          s.breakerPickups,
+          s.invincibilityPickups,
+          s.frameCount,
+        );
         drawObstacles(ctx, s.obstacles);
 
         // Particle systems: each function filters dead particles and returns
@@ -286,6 +316,12 @@ export default function Game() {
           p.floatingTexts,
           dtFactor,
         );
+        p.breakerBurst = updateAndDrawBreakerParticles(
+          ctx,
+          p.breakerBurst,
+          dtFactor,
+        );
+        p.ghostBurst = updateAndDrawGhostParticles(ctx, p.ghostBurst, dtFactor);
 
         // Magnet attraction ring (only while alive).
         if (!s.gameOver) {
@@ -311,6 +347,8 @@ export default function Game() {
           s.frameCount,
           engine.holdAge,
           s.deathAge,
+          s.invincibilityActive,
+          s.invincibilityTimer,
         );
 
         // Death particle burst (only visible after fatal collision).
@@ -328,6 +366,23 @@ export default function Game() {
           s.frameCount,
         );
 
+        drawBreakerAura(
+          ctx,
+          PLAYER_X + PLAYER_SIZE / 2,
+          s.playerY + PLAYER_SIZE / 2,
+          s.breakerActive,
+          s.frameCount,
+        );
+
+        drawInvincibilityAura(
+          ctx,
+          PLAYER_X + PLAYER_SIZE / 2,
+          s.playerY + PLAYER_SIZE / 2,
+          s.invincibilityActive,
+          s.invincibilityTimer,
+          s.frameCount,
+        );
+
         drawElectricArc(
           ctx,
           engine.isHolding && !s.gameOver,
@@ -339,7 +394,16 @@ export default function Game() {
         if (shaking) ctx.restore();
 
         drawBounceFlash(ctx, s.bounceAge);
+        drawBreakerFlash(ctx, s.breakerFlashAge);
         drawShieldHudIndicator(ctx, s.shieldActive, s.frameCount);
+        drawBreakerHudIndicator(ctx, s.breakerActive, s.frameCount);
+        drawInvincibilityHudIndicator(
+          ctx,
+          s.invincibilityActive,
+          s.invincibilityTimer,
+          INVINCIBILITY_DURATION,
+          s.frameCount,
+        );
         drawHUD(ctx, s.score, s.coinCount, s.hiScore);
       }
 
@@ -409,6 +473,10 @@ export default function Game() {
       onPointerUp={isPlaying ? endHold : undefined}
       onPointerLeave={isPlaying ? endHold : undefined}
       onPointerCancel={isPlaying ? endHold : undefined}
+      // Prevent the iOS long-press context menu (copy/paste/select callout)
+      // from appearing during gameplay. Safe on desktop — right-click still
+      // works in menus because those elements stop propagation.
+      onContextMenu={(e) => e.preventDefault()}
     >
       {/* Single canvas for all dynamic gameplay rendering */}
       <canvas
@@ -464,6 +532,8 @@ export default function Game() {
         onBuyMagnet={store.buyMagnetUpgrade}
         luckyCharmLevel={store.luckyCharmLevel}
         onBuyLuckyCharm={store.buyLuckyCharmUpgrade}
+        powerSurgeLevel={store.powerSurgeLevel}
+        onBuyPowerSurge={store.buyPowerSurgeUpgrade}
         unlocked={store.unlockedCosmetics}
         activeSkin={store.activeSkin}
         activeTrail={store.activeTrail}

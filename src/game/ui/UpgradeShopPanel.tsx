@@ -6,6 +6,9 @@ import {
   LUCKY_CHARM_MAX_LEVEL,
   LUCKY_CHARM_COSTS,
   LUCKY_CHARM_BONUS_PER_LEVEL,
+  POWER_SURGE_MAX_LEVEL,
+  POWER_SURGE_COSTS,
+  POWER_SURGE_INTERVAL_REDUCTION_PER_LEVEL,
 } from '../constants';
 
 interface UpgradeShopPanelProps {
@@ -14,6 +17,8 @@ interface UpgradeShopPanelProps {
   onBuyMagnet: () => void;
   luckyCharmLevel: number;
   onBuyLuckyCharm: () => void;
+  powerSurgeLevel: number;
+  onBuyPowerSurge: () => void;
 }
 
 export function UpgradeShopPanel({
@@ -22,12 +27,17 @@ export function UpgradeShopPanel({
   onBuyMagnet,
   luckyCharmLevel,
   onBuyLuckyCharm,
+  powerSurgeLevel,
+  onBuyPowerSurge,
 }: UpgradeShopPanelProps) {
   const canAffordMagnet =
     magnetLevel < MAGNET_MAX_LEVEL && totalCoins >= MAGNET_COSTS[magnetLevel];
   const canAffordLucky =
     luckyCharmLevel < LUCKY_CHARM_MAX_LEVEL &&
     totalCoins >= LUCKY_CHARM_COSTS[luckyCharmLevel];
+  const canAffordSurge =
+    powerSurgeLevel < POWER_SURGE_MAX_LEVEL &&
+    totalCoins >= POWER_SURGE_COSTS[powerSurgeLevel];
 
   const upgradeRowStyle: React.CSSProperties = {
     display: 'flex',
@@ -126,6 +136,44 @@ export function UpgradeShopPanel({
             }}
           >
             ↑ {LUCKY_CHARM_COSTS[luckyCharmLevel]} 🪙
+          </button>
+        ) : (
+          <span style={{ color: '#00ff88', fontSize: 13, fontWeight: 'bold' }}>
+            ✓ MAX
+          </span>
+        )}
+      </div>
+
+      {/* Power Surge */}
+      <div
+        style={{
+          ...upgradeRowStyle,
+          background: 'rgba(180,0,255,0.08)',
+          border: '1px solid rgba(180,0,255,0.25)',
+        }}
+      >
+        <div style={{ textAlign: 'left' }}>
+          <div style={{ fontSize: 14, fontWeight: 'bold', color: '#cc44ff' }}>
+            ⚡ POWER SURGE
+          </div>
+          <div style={{ fontSize: 11, color: '#666', marginTop: 3 }}>
+            {powerSurgeLevel === 0
+              ? 'More frequent Shield, Breaker & Ghost'
+              : `-${Math.round(powerSurgeLevel * POWER_SURGE_INTERVAL_REDUCTION_PER_LEVEL * 100)}% power-up intervals`}
+            {' · Lv '}
+            {powerSurgeLevel}/{POWER_SURGE_MAX_LEVEL}
+          </div>
+        </div>
+        {powerSurgeLevel < POWER_SURGE_MAX_LEVEL ? (
+          <button
+            onClick={onBuyPowerSurge}
+            disabled={!canAffordSurge}
+            style={{
+              ...btnStyle(canAffordSurge),
+              background: canAffordSurge ? '#cc44ff' : undefined,
+            }}
+          >
+            ↑ {POWER_SURGE_COSTS[powerSurgeLevel]} 🪙
           </button>
         ) : (
           <span style={{ color: '#00ff88', fontSize: 13, fontWeight: 'bold' }}>

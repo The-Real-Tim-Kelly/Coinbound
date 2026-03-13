@@ -3,10 +3,12 @@ import {
   CANVAS_H,
   COIN_RADIUS,
   SHIELD_RADIUS,
+  BREAKER_RADIUS,
+  INVINCIBILITY_RADIUS,
   SPAWN_SAFE_MARGIN,
   MAX_SPAWN_ATTEMPTS,
 } from '../constants';
-import type { Coin, Shield, Obstacle } from '../types';
+import type { Coin, Shield, Breaker, Invincibility, Obstacle } from '../types';
 
 // Returns true when a circular item at (x, y) with the given clearance
 // is too close to any obstacle slab.
@@ -63,6 +65,32 @@ export function spawnShield(): Shield {
     x: CANVAS_W + SHIELD_RADIUS,
     y: SHIELD_RADIUS + 14 + Math.random() * (CANVAS_H - SHIELD_RADIUS * 2 - 28),
     radius: SHIELD_RADIUS,
+    collected: false,
+    bobOffset: Math.random() * Math.PI * 2,
+  };
+}
+
+export function spawnBreaker(): Breaker {
+  return {
+    x: CANVAS_W + BREAKER_RADIUS,
+    y:
+      BREAKER_RADIUS +
+      14 +
+      Math.random() * (CANVAS_H - BREAKER_RADIUS * 2 - 28),
+    radius: BREAKER_RADIUS,
+    collected: false,
+    bobOffset: Math.random() * Math.PI * 2,
+  };
+}
+
+export function spawnInvincibility(): Invincibility {
+  return {
+    x: CANVAS_W + INVINCIBILITY_RADIUS,
+    y:
+      INVINCIBILITY_RADIUS +
+      14 +
+      Math.random() * (CANVAS_H - INVINCIBILITY_RADIUS * 2 - 28),
+    radius: INVINCIBILITY_RADIUS,
     collected: false,
     bobOffset: Math.random() * Math.PI * 2,
   };

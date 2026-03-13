@@ -6,6 +6,8 @@ import type {
   RareCoinParticle,
   FloatingText,
   DeathParticle,
+  BreakerParticle,
+  GhostParticle,
 } from '../types';
 
 export function updateAndDrawTrailParticles(
@@ -218,6 +220,42 @@ export function updateAndDrawFloatingTexts(
   return kept;
 }
 
+export function updateAndDrawBreakerParticles(
+  ctx: CanvasRenderingContext2D,
+  particles: BreakerParticle[],
+  dtFactor: number,
+): BreakerParticle[] {
+  const kept: BreakerParticle[] = [];
+  for (const p of particles) {
+    p.age += dtFactor;
+    if (p.age >= p.maxAge) continue;
+    p.x += p.vx * dtFactor;
+    p.y += p.vy * dtFactor;
+    p.vx *= Math.pow(0.91, dtFactor);
+    p.vy *= Math.pow(0.91, dtFactor);
+    kept.push(p);
+    const t = p.age / p.maxAge;
+    const alpha = (1 - t) * 0.95;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.shadowColor = `hsl(${p.hue},100%,70%)`;
+    ctx.shadowBlur = 12;
+    ctx.fillStyle = t < 0.2 ? '#ffffff' : `hsl(${p.hue},100%,${62 + t * 15}%)`;
+    const sz = p.size * (1 - t * 0.45);
+    // Elongated fiery shard
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y - sz);
+    ctx.lineTo(p.x + sz * 0.4, p.y);
+    ctx.lineTo(p.x, p.y + sz * 1.4);
+    ctx.lineTo(p.x - sz * 0.4, p.y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+  return kept;
+}
+
 export function updateAndDrawDeathParticles(
   ctx: CanvasRenderingContext2D,
   particles: DeathParticle[],
@@ -239,9 +277,39 @@ export function updateAndDrawDeathParticles(
     ctx.shadowColor = `hsl(${p.hue},100%,65%)`;
     ctx.shadowBlur = 10;
     // Flash white at the very start, then fade to red/orange
-    ctx.fillStyle =
-      t < 0.18 ? '#ffffff' : `hsl(${p.hue},100%,${65 - t * 20}%)`;
+    ctx.fillStyle = t < 0.18 ? '#ffffff' : `hsl(${p.hue},100%,${65 - t * 20}%)`;
     const sz = p.size * (1 - t * 0.45);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, sz, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+  return kept;
+}
+
+export function updateAndDrawGhostParticles(
+  ctx: CanvasRenderingContext2D,
+  particles: GhostParticle[],
+  dtFactor: number,
+): GhostParticle[] {
+  const kept: GhostParticle[] = [];
+  for (const p of particles) {
+    p.age += dtFactor;
+    if (p.age >= p.maxAge) continue;
+    p.x += p.vx * dtFactor;
+    p.y += p.vy * dtFactor;
+    p.vx *= Math.pow(0.88, dtFactor);
+    p.vy *= Math.pow(0.88, dtFactor);
+    kept.push(p);
+    const t = p.age / p.maxAge;
+    const alpha = (1 - t) * 0.82;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.shadowColor = `hsl(${p.hue},100%,75%)`;
+    ctx.shadowBlur = 14;
+    ctx.fillStyle = t < 0.15 ? '#ffffff' : `hsl(${p.hue},100%,${72 - t * 18}%)`;
+    const sz = p.size * (1 - t * 0.55);
     ctx.beginPath();
     ctx.arc(p.x, p.y, sz, 0, Math.PI * 2);
     ctx.fill();

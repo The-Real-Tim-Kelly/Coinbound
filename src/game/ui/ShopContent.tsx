@@ -8,6 +8,8 @@ export interface ShopContentProps {
   onBuyMagnet: () => void;
   luckyCharmLevel: number;
   onBuyLuckyCharm: () => void;
+  powerSurgeLevel: number;
+  onBuyPowerSurge: () => void;
   unlocked: Set<string>;
   activeSkin: string;
   activeTrail: string;
@@ -59,6 +61,8 @@ export function ShopContent(props: ShopContentProps) {
           onBuyMagnet={props.onBuyMagnet}
           luckyCharmLevel={props.luckyCharmLevel}
           onBuyLuckyCharm={props.onBuyLuckyCharm}
+          powerSurgeLevel={props.powerSurgeLevel}
+          onBuyPowerSurge={props.onBuyPowerSurge}
         />
       )}
       {tab === 'cosmetics' && (

@@ -18,6 +18,9 @@ import {
   playShieldBreakSfx as playShieldBreakSfxFn,
   playCoinPickupSfx as playCoinPickupSfxFn,
   playCrashSfx as playCrashSfxFn,
+  playBreakerPickupSfx as playBreakerPickupSfxFn,
+  playBreakerUsedSfx as playBreakerUsedSfxFn,
+  playInvincibilityPickupSfx as playInvincibilityPickupSfxFn,
 } from './sfx';
 
 interface UseAudioOptions {
@@ -49,6 +52,9 @@ export interface UseAudioReturn {
   playShieldBreakSfxRef: React.MutableRefObject<() => void>;
   playCoinSfxRef: React.MutableRefObject<() => void>;
   playCrashSfxRef: React.MutableRefObject<() => void>;
+  playBreakerPickupSfxRef: React.MutableRefObject<() => void>;
+  playBreakerUsedSfxRef: React.MutableRefObject<() => void>;
+  playInvincibilityPickupSfxRef: React.MutableRefObject<() => void>;
 }
 
 export function useAudio({
@@ -91,6 +97,9 @@ export function useAudio({
   const playShieldBreakSfxRef = useRef<() => void>(() => {});
   const playCoinSfxRef = useRef<() => void>(() => {});
   const playCrashSfxRef = useRef<() => void>(() => {});
+  const playBreakerPickupSfxRef = useRef<() => void>(() => {});
+  const playBreakerUsedSfxRef = useRef<() => void>(() => {});
+  const playInvincibilityPickupSfxRef = useRef<() => void>(() => {});
 
   // Rate-limiter for coin SFX: play at most once per 110 ms
   const coinSfxCooldownRef = useRef<number>(0);
@@ -206,7 +215,7 @@ export function useAudio({
             const bassFreq = MUSIC_BASS[beat % MUSIC_BASS.length];
             const bg = ctx.createGain();
             bg.gain.setValueAtTime(0, t);
-            bg.gain.linearRampToValueAtTime(0.22, t + 0.008);
+            bg.gain.linearRampToValueAtTime(0.12, t + 0.008);
             bg.gain.exponentialRampToValueAtTime(0.001, t + MUSIC_STEP_S * 2.9);
             bg.connect(mg);
             const bo = ctx.createOscillator();
@@ -219,7 +228,7 @@ export function useAudio({
             // ── Four-on-the-floor kick ────────────────────────────────────
             if (MUSIC_KICK_BEATS.has(beat % 8)) {
               const kg = ctx.createGain();
-              kg.gain.setValueAtTime(0.48, t);
+              kg.gain.setValueAtTime(0.26, t);
               kg.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
               kg.connect(mg);
               const ko = ctx.createOscillator();
@@ -234,7 +243,7 @@ export function useAudio({
             // ── Snare / clap ──────────────────────────────────────────────
             if (MUSIC_SNARE_BEATS.has(beat % 8)) {
               const sg = ctx.createGain();
-              sg.gain.setValueAtTime(0.18, t);
+              sg.gain.setValueAtTime(0.09, t);
               sg.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
               sg.connect(mg);
               const so = ctx.createOscillator();
@@ -245,7 +254,7 @@ export function useAudio({
               so.start(t);
               so.stop(t + 0.24);
               const ng = ctx.createGain();
-              ng.gain.setValueAtTime(0.12, t);
+              ng.gain.setValueAtTime(0.06, t);
               ng.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
               ng.connect(mg);
               const no_ = ctx.createOscillator();
@@ -304,11 +313,12 @@ export function useAudio({
       const ac = audioCtxRef.current;
       if (ac.state === 'suspended') void ac.resume();
       const sfxGain = getOrCreateSfxGain(ac);
-      playMagnetActivateSfx(ac, sfxGain);
       if (!humGainRef.current) {
+        // Activate zap fires only once per hum session (not on every repeated press).
+        playMagnetActivateSfx(ac, sfxGain);
         const gain = ac.createGain();
         gain.gain.setValueAtTime(0, ac.currentTime);
-        gain.gain.linearRampToValueAtTime(0.07, ac.currentTime + 0.04);
+        gain.gain.linearRampToValueAtTime(0.04, ac.currentTime + 0.04);
         gain.connect(sfxGain);
         const osc1 = ac.createOscillator();
         osc1.type = 'sawtooth';
@@ -439,6 +449,39 @@ export function useAudio({
     }
   }, [getOrCreateSfxGain]);
 
+  const playBreakerPickupSfx = useCallback(() => {
+    try {
+      if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+      const ac = audioCtxRef.current;
+      if (ac.state === 'suspended') void ac.resume();
+      playBreakerPickupSfxFn(ac, getOrCreateSfxGain(ac));
+    } catch {
+      /* no-op */
+    }
+  }, [getOrCreateSfxGain]);
+
+  const playBreakerUsedSfx = useCallback(() => {
+    try {
+      if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+      const ac = audioCtxRef.current;
+      if (ac.state === 'suspended') void ac.resume();
+      playBreakerUsedSfxFn(ac, getOrCreateSfxGain(ac));
+    } catch {
+      /* no-op */
+    }
+  }, [getOrCreateSfxGain]);
+
+  const playInvincibilityPickupSfx = useCallback(() => {
+    try {
+      if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+      const ac = audioCtxRef.current;
+      if (ac.state === 'suspended') void ac.resume();
+      playInvincibilityPickupSfxFn(ac, getOrCreateSfxGain(ac));
+    } catch {
+      /* no-op */
+    }
+  }, [getOrCreateSfxGain]);
+
   // ── Sync stable refs ──────────────────────────────────────────────────────
   useEffect(() => {
     startMusicRef.current = startMusic;
@@ -464,6 +507,15 @@ export function useAudio({
   useEffect(() => {
     playCrashSfxRef.current = playCrashSfx;
   }, [playCrashSfx]);
+  useEffect(() => {
+    playBreakerPickupSfxRef.current = playBreakerPickupSfx;
+  }, [playBreakerPickupSfx]);
+  useEffect(() => {
+    playBreakerUsedSfxRef.current = playBreakerUsedSfx;
+  }, [playBreakerUsedSfx]);
+  useEffect(() => {
+    playInvincibilityPickupSfxRef.current = playInvincibilityPickupSfx;
+  }, [playInvincibilityPickupSfx]);
 
   return {
     muted,
@@ -484,5 +536,8 @@ export function useAudio({
     playShieldBreakSfxRef,
     playCoinSfxRef,
     playCrashSfxRef,
+    playBreakerPickupSfxRef,
+    playBreakerUsedSfxRef,
+    playInvincibilityPickupSfxRef,
   };
 }

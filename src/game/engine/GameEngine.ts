@@ -22,16 +22,31 @@ import {
   MIN_OBSTACLE_SPACING,
   COIN_RADIUS,
   COIN_INTERVAL,
-  RARE_COIN_CHANCE,
+  RARE_COIN_CHANCE_MIN,
+  RARE_COIN_CHANCE_MAX,
+  RARE_COIN_CHANCE_GROWTH,
   RARE_COIN_VALUE,
   SHIELD_RADIUS,
-  SHIELD_INTERVAL,
+  SHIELD_INTERVAL_MIN,
+  SHIELD_INTERVAL_MAX,
   SHIELD_BOUNCE_VY,
   SHIELD_BOUNCE_PUSHBACK,
   SHIELD_BOUNCE_DURATION,
+  BREAKER_RADIUS,
+  BREAKER_INTERVAL_MIN,
+  BREAKER_INTERVAL_MAX,
+  BREAKER_FLASH_DURATION,
+  MAX_BREAKER_PARTICLES,
+  INVINCIBILITY_RADIUS,
+  INVINCIBILITY_INTERVAL_MIN,
+  INVINCIBILITY_INTERVAL_MAX,
+  INVINCIBILITY_DURATION,
+  POWER_UP_GLOBAL_COOLDOWN_MIN,
+  POWER_UP_GLOBAL_COOLDOWN_MAX,
   MAGNET_RADIUS_PER_LEVEL,
   LUCKY_CHARM_BONUS_PER_LEVEL,
   LUCKY_COIN_CHECK_INTERVAL,
+  POWER_SURGE_INTERVAL_REDUCTION_PER_LEVEL,
   MAX_TRAIL_PARTICLES,
   MAX_MAG_PARTICLES,
   MAX_CEIL_PARTICLES,
@@ -43,7 +58,13 @@ import {
 } from '../constants';
 import { makeInitialState } from '../logic/gameState';
 import { spawnObstacle } from '../logic/obstacles';
-import { spawnCoin, spawnShield, findSafeSpawnY } from '../logic/coins';
+import {
+  spawnCoin,
+  spawnShield,
+  spawnBreaker,
+  spawnInvincibility,
+  findSafeSpawnY,
+} from '../logic/coins';
 import {
   emitTrailParticles,
   emitMagParticles,
@@ -58,6 +79,8 @@ import type {
   RareCoinParticle,
   FloatingText,
   DeathParticle,
+  BreakerParticle,
+  GhostParticle,
 } from '../types';
 
 // ─── Public interfaces ────────────────────────────────────────────────────────
@@ -66,6 +89,7 @@ import type {
 export interface EngineConfig {
   magnetLevel: number;
   luckyCharmLevel: number;
+  powerSurgeLevel: number;
   activeTrail: string;
 }
 
@@ -78,6 +102,9 @@ export interface EngineCallbacks {
   onCoinCollected: () => void;
   onShieldPickedUp: () => void;
   onShieldBroken: () => void;
+  onBreakerPickedUp: () => void;
+  onBreakerUsed: () => void;
+  onInvincibilityPickedUp: () => void;
 }
 
 /** All live particle arrays, kept together for tidy access from the renderer. */
@@ -89,6 +116,8 @@ export interface ParticleState {
   rareCoin: RareCoinParticle[];
   floatingTexts: FloatingText[];
   deathParticles: DeathParticle[];
+  breakerBurst: BreakerParticle[];
+  ghostBurst: GhostParticle[];
 }
 
 // ─── GameEngine ───────────────────────────────────────────────────────────────
@@ -101,7 +130,9 @@ export class GameEngine {
   // ── Input ─────────────────────────────────────────────────────────────────
   private _isHolding = false;
   private _holdAge = 0;
-
+  // ── Invincibility loop sound state ─────────────────────────────────────
+  /** Set externally to true when ghost mode activates; reset when it ends. */
+  invincibilityJustEnded = false;
   // ── Scroll offset (background + parallax) ─────────────────────────────────
   private _bgOffset = 0;
 
@@ -121,6 +152,8 @@ export class GameEngine {
       rareCoin: [],
       floatingTexts: [],
       deathParticles: [],
+      breakerBurst: [],
+      ghostBurst: [],
     };
   }
 
@@ -166,6 +199,8 @@ export class GameEngine {
     this.particles.rareCoin.length = 0;
     this.particles.floatingTexts.length = 0;
     this.particles.deathParticles.length = 0;
+    this.particles.breakerBurst.length = 0;
+    this.particles.ghostBurst.length = 0;
   }
 
   /** Transition from "idle / menu" to active gameplay. */
@@ -243,7 +278,11 @@ export class GameEngine {
     // ── Coin spawning ─────────────────────────────────────────────────────
     if (s.frameCount - s.lastCoinSpawn >= COIN_INTERVAL) {
       s.lastCoinSpawn = s.frameCount;
-      const coin = spawnCoin(Math.random() < RARE_COIN_CHANCE);
+      const rareCoinChance = Math.min(
+        RARE_COIN_CHANCE_MAX,
+        RARE_COIN_CHANCE_MIN + s.frameCount * RARE_COIN_CHANCE_GROWTH,
+      );
+      const coin = spawnCoin(Math.random() < rareCoinChance);
       coin.y = findSafeSpawnY(
         coin.x,
         coin.radius,
@@ -262,7 +301,11 @@ export class GameEngine {
       s.lastLuckySpawn = s.frameCount;
       const chance = this._config.luckyCharmLevel * LUCKY_CHARM_BONUS_PER_LEVEL;
       if (Math.random() < chance) {
-        const lc = spawnCoin(Math.random() < RARE_COIN_CHANCE);
+        const rareCoinChanceLucky = Math.min(
+          RARE_COIN_CHANCE_MAX,
+          RARE_COIN_CHANCE_MIN + s.frameCount * RARE_COIN_CHANCE_GROWTH,
+        );
+        const lc = spawnCoin(Math.random() < rareCoinChanceLucky);
         lc.y = findSafeSpawnY(
           lc.x,
           lc.radius,
@@ -278,9 +321,29 @@ export class GameEngine {
     if (
       !s.shieldActive &&
       !s.shieldPickups.some((sp) => !sp.collected) &&
-      s.frameCount - s.lastShieldSpawn >= SHIELD_INTERVAL
+      s.frameCount >= s.nextShieldSpawn &&
+      s.frameCount >= s.nextPowerUpAllowed
     ) {
-      s.lastShieldSpawn = s.frameCount;
+      const surgeFactor = Math.max(
+        0.4,
+        1 -
+          this._config.powerSurgeLevel *
+            POWER_SURGE_INTERVAL_REDUCTION_PER_LEVEL,
+      );
+      s.nextShieldSpawn =
+        s.frameCount +
+        Math.floor(
+          (SHIELD_INTERVAL_MIN +
+            Math.random() * (SHIELD_INTERVAL_MAX - SHIELD_INTERVAL_MIN)) *
+            surgeFactor,
+        );
+      s.nextPowerUpAllowed =
+        s.frameCount +
+        Math.floor(
+          POWER_UP_GLOBAL_COOLDOWN_MIN +
+            Math.random() *
+              (POWER_UP_GLOBAL_COOLDOWN_MAX - POWER_UP_GLOBAL_COOLDOWN_MIN),
+        );
       const shield = spawnShield();
       shield.y = findSafeSpawnY(
         shield.x,
@@ -292,16 +355,101 @@ export class GameEngine {
       s.shieldPickups.push(shield);
     }
 
+    // ── Breaker spawning (very rare; maximum one on screen) ──────────────────
+    if (
+      !s.breakerActive &&
+      !s.breakerPickups.some((bp) => !bp.collected) &&
+      s.frameCount >= s.nextBreakerSpawn &&
+      s.frameCount >= s.nextPowerUpAllowed
+    ) {
+      const surgeFactor = Math.max(
+        0.4,
+        1 -
+          this._config.powerSurgeLevel *
+            POWER_SURGE_INTERVAL_REDUCTION_PER_LEVEL,
+      );
+      s.nextBreakerSpawn =
+        s.frameCount +
+        Math.floor(
+          (BREAKER_INTERVAL_MIN +
+            Math.random() * (BREAKER_INTERVAL_MAX - BREAKER_INTERVAL_MIN)) *
+            surgeFactor,
+        );
+      s.nextPowerUpAllowed =
+        s.frameCount +
+        Math.floor(
+          POWER_UP_GLOBAL_COOLDOWN_MIN +
+            Math.random() *
+              (POWER_UP_GLOBAL_COOLDOWN_MAX - POWER_UP_GLOBAL_COOLDOWN_MIN),
+        );
+      const breaker = spawnBreaker();
+      breaker.y = findSafeSpawnY(
+        breaker.x,
+        breaker.radius,
+        s.obstacles,
+        BREAKER_RADIUS + 14,
+        CANVAS_H - BREAKER_RADIUS * 2 - 14,
+      );
+      s.breakerPickups.push(breaker);
+    }
+
+    // ── Invincibility spawning (rare; maximum one on screen, one held at a time) ──
+    if (
+      !s.invincibilityActive &&
+      !s.invincibilityPickups.some((ip) => !ip.collected) &&
+      s.frameCount >= s.nextInvincSpawn &&
+      s.frameCount >= s.nextPowerUpAllowed
+    ) {
+      const surgeFactor = Math.max(
+        0.4,
+        1 -
+          this._config.powerSurgeLevel *
+            POWER_SURGE_INTERVAL_REDUCTION_PER_LEVEL,
+      );
+      s.nextInvincSpawn =
+        s.frameCount +
+        Math.floor(
+          (INVINCIBILITY_INTERVAL_MIN +
+            Math.random() *
+              (INVINCIBILITY_INTERVAL_MAX - INVINCIBILITY_INTERVAL_MIN)) *
+            surgeFactor,
+        );
+      s.nextPowerUpAllowed =
+        s.frameCount +
+        Math.floor(
+          POWER_UP_GLOBAL_COOLDOWN_MIN +
+            Math.random() *
+              (POWER_UP_GLOBAL_COOLDOWN_MAX - POWER_UP_GLOBAL_COOLDOWN_MIN),
+        );
+      const invinc = spawnInvincibility();
+      invinc.y = findSafeSpawnY(
+        invinc.x,
+        invinc.radius,
+        s.obstacles,
+        INVINCIBILITY_RADIUS + 14,
+        CANVAS_H - INVINCIBILITY_RADIUS * 2 - 14,
+      );
+      s.invincibilityPickups.push(invinc);
+    }
+
     // ── Scroll world left ─────────────────────────────────────────────────
     for (const obs of s.obstacles) obs.x -= s.speed * dtFactor;
     for (const coin of s.coins) coin.x -= s.speed * dtFactor;
     for (const sp of s.shieldPickups) sp.x -= s.speed * dtFactor;
+    for (const bp of s.breakerPickups) bp.x -= s.speed * dtFactor;
+    for (const ip of s.invincibilityPickups) ip.x -= s.speed * dtFactor;
 
     // ── Prune off-screen entities ─────────────────────────────────────────
-    s.obstacles = s.obstacles.filter((o) => o.x > -o.w - 2);
+    s.obstacles = s.obstacles.filter((o) => o.x > -o.w - 2 && !o.destroyed);
     s.coins = s.coins.filter((c) => !c.collected && c.x > -c.radius - 2);
     s.shieldPickups = s.shieldPickups.filter(
       (sp) => !sp.collected && sp.x > -sp.radius - 2,
+    );
+    s.breakerPickups = s.breakerPickups.filter(
+      (bp) => !bp.collected && bp.x > -bp.radius - 2,
+    );
+    s.invincibilityPickups = s.invincibilityPickups.filter(
+      (ip) => !ip.collected && ip.x > -ip.radius - 2,
     );
 
     // ── Score: count passed obstacles ─────────────────────────────────────
@@ -373,47 +521,137 @@ export class GameEngine {
       }
     }
 
+    // ── Breaker pickup ───────────────────────────────────────────────────
+    if (!s.breakerActive) {
+      for (const bp of s.breakerPickups) {
+        if (bp.collected) continue;
+        const bpNX = Math.max(pcx - half, Math.min(pcx + half, bp.x));
+        const bpNY = Math.max(pcy - half, Math.min(pcy + half, bp.y));
+        const bpDx = bp.x - bpNX;
+        const bpDy = bp.y - bpNY;
+        if (bpDx * bpDx + bpDy * bpDy < bp.radius * bp.radius) {
+          bp.collected = true;
+          s.breakerActive = true;
+          this._cb.onBreakerPickedUp();
+        }
+      }
+    }
+
+    // ── Invincibility pickup (can be held alongside Shield or Breaker) ───
+    if (!s.invincibilityActive) {
+      for (const ip of s.invincibilityPickups) {
+        if (ip.collected) continue;
+        const ipNX = Math.max(pcx - half, Math.min(pcx + half, ip.x));
+        const ipNY = Math.max(pcy - half, Math.min(pcy + half, ip.y));
+        const ipDx = ip.x - ipNX;
+        const ipDy = ip.y - ipNY;
+        if (ipDx * ipDx + ipDy * ipDy < ip.radius * ip.radius) {
+          ip.collected = true;
+          s.invincibilityActive = true;
+          s.invincibilityTimer = INVINCIBILITY_DURATION;
+          this._spawnGhostBurst(pcx, pcy);
+          this._spawnFloatingText(
+            PLAYER_X + PLAYER_SIZE / 2,
+            s.playerY - 4,
+            'GHOST!',
+          );
+          this._cb.onInvincibilityPickedUp();
+        }
+      }
+    }
+
+    // ── Invincibility timer countdown ─────────────────────────────────────
+    if (s.invincibilityActive) {
+      s.invincibilityTimer = Math.max(0, s.invincibilityTimer - dtFactor);
+      if (s.invincibilityTimer <= 0) {
+        s.invincibilityActive = false;
+        this.invincibilityJustEnded = true;
+      }
+    }
+
     // ── Collision detection (per-slab AABB, 4 px inset) ──────────────────
     const px1 = PLAYER_X + 4;
     const px2 = PLAYER_X + PLAYER_SIZE - 4;
     const py1 = s.playerY + 4;
     const py2 = s.playerY + PLAYER_SIZE - 4;
 
-    collisionLoop: for (const obs of s.obstacles) {
-      if (px2 > obs.x && px1 < obs.x + obs.w) {
-        for (const slab of obs.slabs) {
-          if (py2 > slab.y && py1 < slab.y + slab.h) {
-            if (s.shieldActive) {
-              // Shield absorbs the hit: bounce player away and push world back.
-              s.shieldActive = false;
-              s.bounceAge = SHIELD_BOUNCE_DURATION;
-              const slabMidY = slab.y + slab.h / 2;
-              s.playerVY =
-                pcy < slabMidY ? -SHIELD_BOUNCE_VY : SHIELD_BOUNCE_VY;
-              for (const o of s.obstacles) o.x += SHIELD_BOUNCE_PUSHBACK;
-              for (const c of s.coins) c.x += SHIELD_BOUNCE_PUSHBACK;
-              for (const shp of s.shieldPickups)
-                shp.x += SHIELD_BOUNCE_PUSHBACK;
-              this._bgOffset = Math.max(
-                0,
-                this._bgOffset - SHIELD_BOUNCE_PUSHBACK,
-              );
-              this._spawnShieldShards(pcx, pcy);
-              this._cb.onShieldBroken();
-            } else {
-              s.gameOver = true;
-              s.deathAge = 0.01; // kick off death animation
-              if (s.score > s.hiScore) s.hiScore = s.score;
-              this._spawnDeathParticles(pcx, pcy);
+    // Invincibility = full ghost mode: pass through all obstacles harmlessly.
+    if (!s.invincibilityActive) {
+      collisionLoop: for (const obs of s.obstacles) {
+        if (obs.destroyed) continue;
+        if (px2 > obs.x && px1 < obs.x + obs.w) {
+          for (const slab of obs.slabs) {
+            if (py2 > slab.y && py1 < slab.y + slab.h) {
+              if (s.shieldActive && s.breakerActive) {
+                // Both active: Shield is consumed first; Breaker stays for the next hit.
+                s.shieldActive = false;
+                s.bounceAge = SHIELD_BOUNCE_DURATION;
+                const slabMidY = slab.y + slab.h / 2;
+                s.playerVY =
+                  pcy < slabMidY ? -SHIELD_BOUNCE_VY : SHIELD_BOUNCE_VY;
+                for (const o of s.obstacles) o.x += SHIELD_BOUNCE_PUSHBACK;
+                for (const c of s.coins) c.x += SHIELD_BOUNCE_PUSHBACK;
+                for (const shp of s.shieldPickups)
+                  shp.x += SHIELD_BOUNCE_PUSHBACK;
+                for (const bp of s.breakerPickups)
+                  bp.x += SHIELD_BOUNCE_PUSHBACK;
+                this._bgOffset = Math.max(
+                  0,
+                  this._bgOffset - SHIELD_BOUNCE_PUSHBACK,
+                );
+                this._spawnShieldShards(pcx, pcy);
+                this._cb.onShieldBroken();
+              } else if (s.breakerActive) {
+                // Only Breaker active: destroy the obstacle and consume it.
+                obs.destroyed = true;
+                s.breakerActive = false;
+                this._spawnBreakerBurst(
+                  obs.x + obs.w / 2,
+                  s.playerY + PLAYER_SIZE / 2,
+                );
+                this._spawnFloatingText(
+                  PLAYER_X + PLAYER_SIZE / 2,
+                  s.playerY - 4,
+                  'BREAK!',
+                );
+                s.breakerFlashAge = BREAKER_FLASH_DURATION;
+                this._cb.onBreakerUsed();
+              } else if (s.shieldActive) {
+                // Only Shield active: absorb the hit, bounce player away.
+                s.shieldActive = false;
+                s.bounceAge = SHIELD_BOUNCE_DURATION;
+                const slabMidY = slab.y + slab.h / 2;
+                s.playerVY =
+                  pcy < slabMidY ? -SHIELD_BOUNCE_VY : SHIELD_BOUNCE_VY;
+                for (const o of s.obstacles) o.x += SHIELD_BOUNCE_PUSHBACK;
+                for (const c of s.coins) c.x += SHIELD_BOUNCE_PUSHBACK;
+                for (const shp of s.shieldPickups)
+                  shp.x += SHIELD_BOUNCE_PUSHBACK;
+                for (const bp of s.breakerPickups)
+                  bp.x += SHIELD_BOUNCE_PUSHBACK;
+                this._bgOffset = Math.max(
+                  0,
+                  this._bgOffset - SHIELD_BOUNCE_PUSHBACK,
+                );
+                this._spawnShieldShards(pcx, pcy);
+                this._cb.onShieldBroken();
+              } else {
+                s.gameOver = true;
+                s.deathAge = 0.01; // kick off death animation
+                if (s.score > s.hiScore) s.hiScore = s.score;
+                this._spawnDeathParticles(pcx, pcy);
+              }
+              break collisionLoop;
             }
-            break collisionLoop;
           }
         }
-      }
-    }
+      } // closes collisionLoop for
+    } // end if (!s.invincibilityActive)
 
-    // ── Bounce-flash countdown ────────────────────────────────────────────
+    // ── Bounce-flash / Breaker-flash countdown ────────────────────────────
     if (s.bounceAge > 0) s.bounceAge = Math.max(0, s.bounceAge - dtFactor);
+    if (s.breakerFlashAge > 0)
+      s.breakerFlashAge = Math.max(0, s.breakerFlashAge - dtFactor);
 
     // ── Trail particle emission ───────────────────────────────────────────
     const newTrail = emitTrailParticles(
@@ -492,6 +730,25 @@ export class GameEngine {
     }
   }
 
+  private _spawnBreakerBurst(cx: number, cy: number): void {
+    const p = this.particles.breakerBurst;
+    for (let i = 0; i < 36; i++) {
+      if (p.length >= MAX_BREAKER_PARTICLES) break;
+      const ang = (i / 36) * Math.PI * 2 + Math.random() * 0.18;
+      const spd = 3.5 + Math.random() * 7.5;
+      p.push({
+        x: cx + (Math.random() - 0.5) * 30,
+        y: cy + (Math.random() - 0.5) * 30,
+        vx: Math.cos(ang) * spd,
+        vy: Math.sin(ang) * spd,
+        age: 0,
+        maxAge: 24 + Math.random() * 22,
+        size: 2.5 + Math.random() * 5.5,
+        hue: 15 + Math.random() * 35,
+      });
+    }
+  }
+
   private _spawnDeathParticles(cx: number, cy: number): void {
     const p = this.particles.deathParticles;
     for (let i = 0; i < 22; i++) {
@@ -508,6 +765,24 @@ export class GameEngine {
         size: 2 + Math.random() * 4,
         // 60% red (0–20 hue), 40% orange (20–40 hue)
         hue: Math.random() < 0.6 ? Math.random() * 20 : 20 + Math.random() * 20,
+      });
+    }
+  }
+
+  private _spawnGhostBurst(cx: number, cy: number): void {
+    const p = this.particles.ghostBurst;
+    for (let i = 0; i < 32; i++) {
+      const ang = (i / 32) * Math.PI * 2 + Math.random() * 0.2;
+      const spd = 2.0 + Math.random() * 5.5;
+      p.push({
+        x: cx + (Math.random() - 0.5) * PLAYER_SIZE,
+        y: cy + (Math.random() - 0.5) * PLAYER_SIZE,
+        vx: Math.cos(ang) * spd,
+        vy: Math.sin(ang) * spd,
+        age: 0,
+        maxAge: 28 + Math.random() * 22,
+        size: 2 + Math.random() * 4,
+        hue: 180 + Math.random() * 60, // cyan to blue
       });
     }
   }

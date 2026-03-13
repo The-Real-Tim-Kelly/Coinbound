@@ -118,6 +118,28 @@ export interface DeathParticle {
   hue: number; // 0–40: red/orange spectrum
 }
 
+export interface BreakerParticle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  age: number;
+  maxAge: number;
+  size: number;
+  hue: number; // 10–50 orange/yellow fire
+}
+
+export interface GhostParticle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  age: number;
+  maxAge: number;
+  size: number;
+  hue: number; // 180–240 cyan/blue ethereal
+}
+
 // ─── Obstacle types ───────────────────────────────────────────────────────────
 export type ObstacleKind = 'block' | 'bar' | 'spike' | 'diamond';
 
@@ -141,6 +163,7 @@ export interface Obstacle {
   gapH: number; // height of the passable gap
   color: string;
   passed: boolean;
+  destroyed?: boolean; // set true when Breaker power-up destroys this obstacle
 }
 
 // ─── Coin ─────────────────────────────────────────────────────────────────────
@@ -162,6 +185,22 @@ export interface Shield {
   bobOffset: number;
 }
 
+// ─── Breaker pickup ───────────────────────────────────────────────────────────
+export interface Breaker {
+  x: number;
+  y: number;
+  radius: number;
+  collected: boolean;
+  bobOffset: number;
+}
+// ─── Invincibility pickup ───────────────────────────────────────────────
+export interface Invincibility {
+  x: number;
+  y: number;
+  radius: number;
+  collected: boolean;
+  bobOffset: number;
+}
 // ─── Game state ───────────────────────────────────────────────────────────────
 export interface GameState {
   playerY: number;
@@ -169,6 +208,8 @@ export interface GameState {
   obstacles: Obstacle[];
   coins: Coin[];
   shieldPickups: Shield[];
+  breakerPickups: Breaker[];
+  invincibilityPickups: Invincibility[];
   coinCount: number;
   hiCoins: number;
   score: number;
@@ -176,12 +217,19 @@ export interface GameState {
   gameOver: boolean;
   started: boolean;
   shieldActive: boolean;
+  breakerActive: boolean;
+  invincibilityActive: boolean;
+  invincibilityTimer: number; // frames remaining; 0 = inactive
   bounceAge: number; // countdown for bounce animation frames
-  deathAge: number;  // frames since death (0 = alive, >0 = dying)
+  breakerFlashAge: number; // countdown frames for orange flash on obstacle break
+  deathAge: number; // frames since death (0 = alive, >0 = dying)
   speed: number;
   frameCount: number;
   lastSpawn: number;
   lastCoinSpawn: number;
-  lastShieldSpawn: number;
   lastLuckySpawn: number;
+  nextShieldSpawn: number; // frame at which shield is next eligible to spawn
+  nextBreakerSpawn: number; // frame at which breaker is next eligible to spawn
+  nextInvincSpawn: number; // frame at which invincibility is next eligible to spawn
+  nextPowerUpAllowed: number; // global cooldown gate: no power-up may spawn before this frame
 }
