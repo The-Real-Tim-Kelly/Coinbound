@@ -21,6 +21,9 @@ import {
   playBreakerPickupSfx as playBreakerPickupSfxFn,
   playBreakerUsedSfx as playBreakerUsedSfxFn,
   playInvincibilityPickupSfx as playInvincibilityPickupSfxFn,
+  playRunFanfareSfx as playRunFanfareSfxFn,
+  playNewRecordSfx as playNewRecordSfxFn,
+  playBankCoinSfx as playBankCoinSfxFn,
 } from './sfx';
 
 interface UseAudioOptions {
@@ -55,6 +58,10 @@ export interface UseAudioReturn {
   playBreakerPickupSfxRef: React.MutableRefObject<() => void>;
   playBreakerUsedSfxRef: React.MutableRefObject<() => void>;
   playInvincibilityPickupSfxRef: React.MutableRefObject<() => void>;
+  // End-of-run feedback (called from React components)
+  playRunFanfare: () => void;
+  playNewRecordSfx: () => void;
+  playBankCoinSfx: () => void;
 }
 
 export function useAudio({
@@ -482,6 +489,39 @@ export function useAudio({
     }
   }, [getOrCreateSfxGain]);
 
+  const playRunFanfare = useCallback(() => {
+    try {
+      if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+      const ac = audioCtxRef.current;
+      if (ac.state === 'suspended') void ac.resume();
+      playRunFanfareSfxFn(ac, getOrCreateSfxGain(ac));
+    } catch {
+      /* no-op */
+    }
+  }, [getOrCreateSfxGain]);
+
+  const playNewRecordSfx = useCallback(() => {
+    try {
+      if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+      const ac = audioCtxRef.current;
+      if (ac.state === 'suspended') void ac.resume();
+      playNewRecordSfxFn(ac, getOrCreateSfxGain(ac));
+    } catch {
+      /* no-op */
+    }
+  }, [getOrCreateSfxGain]);
+
+  const playBankCoinSfx = useCallback(() => {
+    try {
+      if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+      const ac = audioCtxRef.current;
+      if (ac.state === 'suspended') void ac.resume();
+      playBankCoinSfxFn(ac, getOrCreateSfxGain(ac));
+    } catch {
+      /* no-op */
+    }
+  }, [getOrCreateSfxGain]);
+
   // ── Sync stable refs ──────────────────────────────────────────────────────
   useEffect(() => {
     startMusicRef.current = startMusic;
@@ -539,5 +579,8 @@ export function useAudio({
     playBreakerPickupSfxRef,
     playBreakerUsedSfxRef,
     playInvincibilityPickupSfxRef,
+    playRunFanfare,
+    playNewRecordSfx,
+    playBankCoinSfx,
   };
 }

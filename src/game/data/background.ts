@@ -8,6 +8,21 @@ export const BG_STARS = Array.from({ length: 80 }, (_, i) => ({
   a: 0.35 + (i % 5) * 0.12,
 }));
 
+// Pre-grouped by the 5 distinct alpha values so drawBackground can batch fills
+// into 5 fill() calls instead of 80 — one per group instead of one per star.
+export interface StarGroup {
+  alpha: number;
+  stars: Array<{ x: number; y: number; r: number }>;
+}
+const _alphas = [0.35, 0.47, 0.59, 0.71, 0.83] as const;
+export const BG_STAR_GROUPS: StarGroup[] = _alphas.map((alpha) => ({
+  alpha,
+  stars: [],
+}));
+BG_STARS.forEach((star, i) => {
+  BG_STAR_GROUPS[i % 5].stars.push({ x: star.x, y: star.y, r: star.r });
+});
+
 // Horizontal motion streaks that scroll left to sell forward motion.
 export const SPEED_LINES = Array.from({ length: 28 }, (_, i) => ({
   y: ((i * 89 + 15) % (CANVAS_H - 20)) + 10,

@@ -1,3 +1,9 @@
+// ─── Leaderboard ─────────────────────────────────────────────────────────────
+export interface LeaderboardEntry {
+  value: number;
+  datetime: string; // ISO 8601
+}
+
 // ─── CosmeticType ─────────────────────────────────────────────────────────────
 // Cosmetics only change visuals — hitbox stays a 34×34 AABB regardless of shape.
 export const CosmeticType = {

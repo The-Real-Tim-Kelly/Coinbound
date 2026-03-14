@@ -17,6 +17,15 @@ export function updateAndDrawTrailParticles(
   dtFactor: number,
 ): TrailParticle[] {
   const kept: TrailParticle[] = [];
+  if (particles.length === 0) return kept;
+  // Hoist ctx.save/restore outside loop; set constant shadow state once per batch.
+  ctx.save();
+  if (activeTrail === 'ghost') {
+    ctx.shadowColor = '#00ddff';
+    ctx.shadowBlur = 10;
+  } else if (activeTrail === 'rainbow' || activeTrail === 'stars') {
+    ctx.shadowBlur = 8;
+  }
   for (const p of particles) {
     p.age += dtFactor;
     if (p.age >= p.maxAge) continue;
@@ -24,25 +33,20 @@ export function updateAndDrawTrailParticles(
     p.y += p.vy * dtFactor;
     kept.push(p);
     const alpha = 1 - p.age / p.maxAge;
-    ctx.save();
     ctx.globalAlpha = alpha;
     if (activeTrail === 'ghost') {
-      ctx.shadowColor = '#00ddff';
-      ctx.shadowBlur = 10;
       ctx.fillStyle = 'rgba(0,220,255,0.5)';
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.size * (0.5 + 0.5 * alpha), 0, Math.PI * 2);
       ctx.fill();
     } else if (activeTrail === 'rainbow') {
       ctx.shadowColor = `hsl(${p.hue},100%,65%)`;
-      ctx.shadowBlur = 8;
       ctx.fillStyle = `hsl(${p.hue},100%,65%)`;
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.size * (0.4 + 0.6 * alpha), 0, Math.PI * 2);
       ctx.fill();
     } else if (activeTrail === 'stars') {
       ctx.shadowColor = p.color;
-      ctx.shadowBlur = 8;
       ctx.fillStyle = p.color;
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.size * (0.4 + 0.6 * alpha), 0, Math.PI * 2);
@@ -52,9 +56,10 @@ export function updateAndDrawTrailParticles(
       const sz = p.size * alpha;
       ctx.fillRect(p.x - sz / 2, p.y - sz / 2, sz, sz);
     }
-    ctx.globalAlpha = 1;
-    ctx.restore();
   }
+  ctx.globalAlpha = 1;
+  ctx.shadowBlur = 0;
+  ctx.restore();
   return kept;
 }
 
@@ -64,28 +69,30 @@ export function updateAndDrawMagParticles(
   dtFactor: number,
 ): MagParticle[] {
   const kept: MagParticle[] = [];
+  if (particles.length === 0) return kept;
+  // Pre-compute per-frame friction; hoist uniform shadow state outside loop.
+  const friction96 = Math.pow(0.96, dtFactor);
+  ctx.save();
+  ctx.shadowColor = '#00ccff';
+  ctx.shadowBlur = 8;
   for (const p of particles) {
     p.age += dtFactor;
     if (p.age >= p.maxAge) continue;
     p.x += p.vx * dtFactor;
     p.y += p.vy * dtFactor;
-    p.vy *= Math.pow(0.96, dtFactor);
+    p.vy *= friction96;
     kept.push(p);
     const t = p.age / p.maxAge;
-    const alpha = (1 - t) * 0.85;
-    const lightness = 65 + t * 30;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.shadowColor = '#00ccff';
-    ctx.shadowBlur = 8;
-    ctx.fillStyle = `hsl(190,100%,${lightness}%)`;
+    ctx.globalAlpha = (1 - t) * 0.85;
+    ctx.fillStyle = `hsl(190,100%,${65 + t * 30}%)`;
     const sz = p.size * (1 - t * 0.5);
     ctx.beginPath();
     ctx.arc(p.x, p.y, sz, 0, Math.PI * 2);
     ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.restore();
   }
+  ctx.globalAlpha = 1;
+  ctx.shadowBlur = 0;
+  ctx.restore();
   return kept;
 }
 
@@ -95,27 +102,29 @@ export function updateAndDrawCeilParticles(
   dtFactor: number,
 ): CeilParticle[] {
   const kept: CeilParticle[] = [];
+  if (particles.length === 0) return kept;
+  const friction92 = Math.pow(0.92, dtFactor);
+  ctx.save();
+  ctx.shadowColor = '#88eeff';
+  ctx.shadowBlur = 7;
   for (const p of particles) {
     p.age += dtFactor;
     if (p.age >= p.maxAge) continue;
     p.x += p.vx * dtFactor;
     p.y += p.vy * dtFactor;
-    p.vy *= Math.pow(0.92, dtFactor);
+    p.vy *= friction92;
     kept.push(p);
     const t = p.age / p.maxAge;
-    const alpha = (1 - t) * 0.92;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.shadowColor = '#88eeff';
-    ctx.shadowBlur = 7;
+    ctx.globalAlpha = (1 - t) * 0.92;
     ctx.fillStyle = t < 0.25 ? '#ffffff' : `hsl(190,100%,${75 + t * 20}%)`;
     const sz = p.size * (1 - t * 0.5);
     ctx.beginPath();
     ctx.arc(p.x, p.y, sz, 0, Math.PI * 2);
     ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.restore();
   }
+  ctx.globalAlpha = 1;
+  ctx.shadowBlur = 0;
+  ctx.restore();
   return kept;
 }
 
@@ -125,20 +134,22 @@ export function updateAndDrawShieldShards(
   dtFactor: number,
 ): ShieldShard[] {
   const kept: ShieldShard[] = [];
+  if (particles.length === 0) return kept;
+  // shadowBlur is constant across all shards; only shadowColor varies per hue.
+  const friction93 = Math.pow(0.93, dtFactor);
+  ctx.save();
+  ctx.shadowBlur = 9;
   for (const p of particles) {
     p.age += dtFactor;
     if (p.age >= p.maxAge) continue;
     p.x += p.vx * dtFactor;
     p.y += p.vy * dtFactor;
-    p.vx *= Math.pow(0.93, dtFactor);
-    p.vy *= Math.pow(0.93, dtFactor);
+    p.vx *= friction93;
+    p.vy *= friction93;
     kept.push(p);
     const t = p.age / p.maxAge;
-    const alpha = (1 - t) * 0.95;
-    ctx.save();
-    ctx.globalAlpha = alpha;
+    ctx.globalAlpha = (1 - t) * 0.95;
     ctx.shadowColor = `hsl(${p.hue},100%,75%)`;
-    ctx.shadowBlur = 9;
     ctx.fillStyle = t < 0.2 ? '#ffffff' : `hsl(${p.hue},100%,${70 + t * 20}%)`;
     const sz = p.size * (1 - t * 0.6);
     // Diamond shard shape
@@ -149,9 +160,10 @@ export function updateAndDrawShieldShards(
     ctx.lineTo(p.x - sz * 0.5, p.y);
     ctx.closePath();
     ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.restore();
   }
+  ctx.globalAlpha = 1;
+  ctx.shadowBlur = 0;
+  ctx.restore();
   return kept;
 }
 
@@ -161,28 +173,30 @@ export function updateAndDrawRareCoinParticles(
   dtFactor: number,
 ): RareCoinParticle[] {
   const kept: RareCoinParticle[] = [];
+  if (particles.length === 0) return kept;
+  const friction92 = Math.pow(0.92, dtFactor);
+  ctx.save();
+  ctx.shadowBlur = 10;
   for (const p of particles) {
     p.age += dtFactor;
     if (p.age >= p.maxAge) continue;
     p.x += p.vx * dtFactor;
     p.y += p.vy * dtFactor;
-    p.vx *= Math.pow(0.92, dtFactor);
-    p.vy *= Math.pow(0.92, dtFactor);
+    p.vx *= friction92;
+    p.vy *= friction92;
     kept.push(p);
     const t = p.age / p.maxAge;
-    const alpha = (1 - t) * 0.9;
-    ctx.save();
-    ctx.globalAlpha = alpha;
+    ctx.globalAlpha = (1 - t) * 0.9;
     ctx.shadowColor = `hsl(${p.hue},100%,75%)`;
-    ctx.shadowBlur = 10;
     ctx.fillStyle = t < 0.25 ? '#ffffff' : `hsl(${p.hue},100%,${70 + t * 20}%)`;
     const sz = p.size * (1 - t * 0.5);
     ctx.beginPath();
     ctx.arc(p.x, p.y, sz, 0, Math.PI * 2);
     ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.restore();
   }
+  ctx.globalAlpha = 1;
+  ctx.shadowBlur = 0;
+  ctx.restore();
   return kept;
 }
 
@@ -192,6 +206,17 @@ export function updateAndDrawFloatingTexts(
   dtFactor: number,
 ): FloatingText[] {
   const kept: FloatingText[] = [];
+  if (particles.length === 0) return kept;
+  // Hoist constant style state outside the per-particle loop.
+  // Each particle still needs its own save/restore for the translate+scale transform.
+  ctx.shadowColor = '#dd44ff';
+  ctx.shadowBlur = 14;
+  ctx.font = 'bold 18px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.strokeStyle = 'rgba(0,0,0,0.65)';
+  ctx.lineWidth = 3;
+  ctx.fillStyle = '#ffaaff';
   for (const ft of particles) {
     ft.age += dtFactor;
     if (ft.age >= ft.maxAge) continue;
@@ -204,19 +229,12 @@ export function updateAndDrawFloatingTexts(
     ctx.globalAlpha = alpha;
     ctx.translate(ft.x, ft.y);
     ctx.scale(scale, scale);
-    ctx.shadowColor = '#dd44ff';
-    ctx.shadowBlur = 14;
-    ctx.font = 'bold 18px monospace';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.strokeStyle = 'rgba(0,0,0,0.65)';
-    ctx.lineWidth = 3;
     ctx.strokeText(ft.text, 0, 0);
-    ctx.fillStyle = '#ffaaff';
     ctx.fillText(ft.text, 0, 0);
-    ctx.globalAlpha = 1;
     ctx.restore();
   }
+  ctx.globalAlpha = 1;
+  ctx.shadowBlur = 0;
   return kept;
 }
 
@@ -226,20 +244,21 @@ export function updateAndDrawBreakerParticles(
   dtFactor: number,
 ): BreakerParticle[] {
   const kept: BreakerParticle[] = [];
+  if (particles.length === 0) return kept;
+  const friction91 = Math.pow(0.91, dtFactor);
+  ctx.save();
+  ctx.shadowBlur = 12;
   for (const p of particles) {
     p.age += dtFactor;
     if (p.age >= p.maxAge) continue;
     p.x += p.vx * dtFactor;
     p.y += p.vy * dtFactor;
-    p.vx *= Math.pow(0.91, dtFactor);
-    p.vy *= Math.pow(0.91, dtFactor);
+    p.vx *= friction91;
+    p.vy *= friction91;
     kept.push(p);
     const t = p.age / p.maxAge;
-    const alpha = (1 - t) * 0.95;
-    ctx.save();
-    ctx.globalAlpha = alpha;
+    ctx.globalAlpha = (1 - t) * 0.95;
     ctx.shadowColor = `hsl(${p.hue},100%,70%)`;
-    ctx.shadowBlur = 12;
     ctx.fillStyle = t < 0.2 ? '#ffffff' : `hsl(${p.hue},100%,${62 + t * 15}%)`;
     const sz = p.size * (1 - t * 0.45);
     // Elongated fiery shard
@@ -250,9 +269,10 @@ export function updateAndDrawBreakerParticles(
     ctx.lineTo(p.x - sz * 0.4, p.y);
     ctx.closePath();
     ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.restore();
   }
+  ctx.globalAlpha = 1;
+  ctx.shadowBlur = 0;
+  ctx.restore();
   return kept;
 }
 
@@ -262,29 +282,31 @@ export function updateAndDrawDeathParticles(
   dtFactor: number,
 ): DeathParticle[] {
   const kept: DeathParticle[] = [];
+  if (particles.length === 0) return kept;
+  const friction91d = Math.pow(0.91, dtFactor);
+  ctx.save();
+  ctx.shadowBlur = 10;
   for (const p of particles) {
     p.age += dtFactor;
     if (p.age >= p.maxAge) continue;
     p.x += p.vx * dtFactor;
     p.y += p.vy * dtFactor;
-    p.vx *= Math.pow(0.91, dtFactor);
-    p.vy *= Math.pow(0.91, dtFactor);
+    p.vx *= friction91d;
+    p.vy *= friction91d;
     kept.push(p);
     const t = p.age / p.maxAge;
-    const alpha = (1 - t) * 0.95;
-    ctx.save();
-    ctx.globalAlpha = alpha;
+    ctx.globalAlpha = (1 - t) * 0.95;
     ctx.shadowColor = `hsl(${p.hue},100%,65%)`;
-    ctx.shadowBlur = 10;
     // Flash white at the very start, then fade to red/orange
     ctx.fillStyle = t < 0.18 ? '#ffffff' : `hsl(${p.hue},100%,${65 - t * 20}%)`;
     const sz = p.size * (1 - t * 0.45);
     ctx.beginPath();
     ctx.arc(p.x, p.y, sz, 0, Math.PI * 2);
     ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.restore();
   }
+  ctx.globalAlpha = 1;
+  ctx.shadowBlur = 0;
+  ctx.restore();
   return kept;
 }
 
@@ -294,27 +316,29 @@ export function updateAndDrawGhostParticles(
   dtFactor: number,
 ): GhostParticle[] {
   const kept: GhostParticle[] = [];
+  if (particles.length === 0) return kept;
+  const friction88 = Math.pow(0.88, dtFactor);
+  ctx.save();
+  ctx.shadowBlur = 14;
   for (const p of particles) {
     p.age += dtFactor;
     if (p.age >= p.maxAge) continue;
     p.x += p.vx * dtFactor;
     p.y += p.vy * dtFactor;
-    p.vx *= Math.pow(0.88, dtFactor);
-    p.vy *= Math.pow(0.88, dtFactor);
+    p.vx *= friction88;
+    p.vy *= friction88;
     kept.push(p);
     const t = p.age / p.maxAge;
-    const alpha = (1 - t) * 0.82;
-    ctx.save();
-    ctx.globalAlpha = alpha;
+    ctx.globalAlpha = (1 - t) * 0.82;
     ctx.shadowColor = `hsl(${p.hue},100%,75%)`;
-    ctx.shadowBlur = 14;
     ctx.fillStyle = t < 0.15 ? '#ffffff' : `hsl(${p.hue},100%,${72 - t * 18}%)`;
     const sz = p.size * (1 - t * 0.55);
     ctx.beginPath();
     ctx.arc(p.x, p.y, sz, 0, Math.PI * 2);
     ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.restore();
   }
+  ctx.globalAlpha = 1;
+  ctx.shadowBlur = 0;
+  ctx.restore();
   return kept;
 }

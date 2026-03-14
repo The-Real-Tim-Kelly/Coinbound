@@ -80,6 +80,8 @@ interface GameOverData {
   coins: number;
   hiScore: number;
   hiCoins: number;
+  isNewScore: boolean;
+  isNewCoins: boolean;
 }
 
 export default function Game() {
@@ -127,6 +129,8 @@ export default function Game() {
         onInvincibilityPickedUp: () =>
           audio.playInvincibilityPickupSfxRef.current(),
       },
+      store.bestScoreRef.current,
+      store.bestCoinsRef.current,
     );
   }
 
@@ -135,6 +139,35 @@ export default function Game() {
   const [showSettings, setShowSettings] = useState(false);
   const [isMenuVisible, setIsMenuVisible] = useState(true);
   const [gameOverData, setGameOverData] = useState<GameOverData | null>(null);
+
+  // Wallet animation — top-bar coin counter animates during coin flight
+  // walletLanded: coins that have visually arrived at the wallet this run (resets on retry/menu)
+  // walletPulseKey: toggled on each batch land to re-trigger the CSS pulse animation
+  const walletCoinRef = useRef<HTMLSpanElement>(null);
+  const [walletLanded, setWalletLanded] = useState(0);
+  const [walletPulseKey, setWalletPulseKey] = useState(0);
+
+  // Stable callback — GameOverScreen calls this to get the wallet element's
+  // screen position at the moment the coin flight canvas mounts (after layout).
+  const getWalletPos = useCallback((): { x: number; y: number } | null => {
+    const rect = walletCoinRef.current?.getBoundingClientRect();
+    if (!rect) return null;
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  }, []);
+
+  const handleWalletIncrement = useCallback((delta: number) => {
+    setWalletPulseKey((k) => k + 1);
+    setWalletLanded((prev) => prev + delta);
+  }, []);
+
+  // Derived display value — pre-run total + however many coins have landed so far,
+  // bounded by totalCoins. Falls back to store.totalCoins during normal gameplay.
+  const walletCoinsDisplay = gameOverData
+    ? Math.min(
+        store.totalCoins - gameOverData.coins + walletLanded,
+        store.totalCoins,
+      )
+    : store.totalCoins;
 
   //  Navigation helpers
 
@@ -161,6 +194,8 @@ export default function Game() {
     setShowShop(false);
     setShowSettings(false);
     setGameOverData(null);
+    setWalletLanded(0);
+    setWalletPulseKey(0);
     audio.startMusicRef.current();
   }, [audio.startMusicRef]);
 
@@ -173,6 +208,8 @@ export default function Game() {
     setShowShop(false);
     setShowSettings(false);
     setGameOverData(null);
+    setWalletLanded(0);
+    setWalletPulseKey(0);
     audio.stopMusicRef.current();
   }, [audio.stopMusicRef]);
 
@@ -282,7 +319,12 @@ export default function Game() {
         engine.setHolding(false);
         audio.stopMagnetHumRef.current();
         audio.stopMusicRef.current();
+        // Capture previous bests BEFORE updating leaderboards so we can
+        // detect a new personal record.
+        const prevBestScore = store.bestScoreRef.current;
+        const prevBestCoins = store.bestCoinsRef.current;
         store.addRunCoins(s.coinCount);
+        store.updateLeaderboards(s.hiScore, s.hiCoins);
         audio.playCrashSfxRef.current();
         // Stash data; GameOverScreen is shown after the death animation finishes.
         pendingGameOverRef.current = {
@@ -290,6 +332,8 @@ export default function Game() {
           coins: s.coinCount,
           hiScore: s.hiScore,
           hiCoins: s.hiCoins,
+          isNewScore: s.score > prevBestScore,
+          isNewCoins: s.coinCount > prevBestCoins,
         };
       }
 
@@ -576,6 +620,8 @@ export default function Game() {
               🪙
             </span>
             <span
+              ref={walletCoinRef}
+              key={walletPulseKey}
               style={{
                 color: '#ffd700',
                 fontFamily: 'monospace',
@@ -583,9 +629,14 @@ export default function Game() {
                 fontSize: 'clamp(16px, 4.5vw, 22px)',
                 letterSpacing: 1,
                 textShadow: '0 0 10px rgba(255,215,0,0.6)',
+                display: 'inline-block',
+                animation:
+                  walletPulseKey > 0
+                    ? 'wallet-coin-pulse 0.32s ease-out both'
+                    : undefined,
               }}
             >
-              {store.totalCoins}
+              {walletCoinsDisplay}
             </span>
           </div>
 
@@ -655,6 +706,7 @@ export default function Game() {
             touchAction: 'none',
             position: 'relative',
             zIndex: 1,
+            willChange: 'transform',
           }}
         />
 
@@ -663,6 +715,8 @@ export default function Game() {
         {isMenuVisible && !showShop && !showSettings && (
           <MainMenu
             totalCoins={store.totalCoins}
+            scoreLeaderboard={store.scoreLeaderboard}
+            coinsLeaderboard={store.coinsLeaderboard}
             onPlay={startGame}
             onShop={openShop}
             onSettings={openSettings}
@@ -675,9 +729,19 @@ export default function Game() {
             coins={gameOverData.coins}
             hiScore={gameOverData.hiScore}
             hiCoins={gameOverData.hiCoins}
+            isNewScore={gameOverData.isNewScore}
+            isNewCoins={gameOverData.isNewCoins}
             onRetry={retry}
             onShop={openShop}
             onMenu={goToMenu}
+            onPlayFanfare={
+              gameOverData.isNewScore || gameOverData.isNewCoins
+                ? audio.playNewRecordSfx
+                : audio.playRunFanfare
+            }
+            onPlayBankCoin={audio.playBankCoinSfx}
+            getWalletPos={getWalletPos}
+            onWalletIncrement={handleWalletIncrement}
           />
         )}
       </div>

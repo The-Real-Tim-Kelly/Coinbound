@@ -140,10 +140,15 @@ export class GameEngine {
   private _config: EngineConfig;
   private readonly _cb: EngineCallbacks;
 
-  constructor(config: EngineConfig, callbacks: EngineCallbacks) {
+  constructor(
+    config: EngineConfig,
+    callbacks: EngineCallbacks,
+    hiScore = 0,
+    hiCoins = 0,
+  ) {
     this._config = { ...config };
     this._cb = callbacks;
-    this.state = makeInitialState();
+    this.state = makeInitialState(hiScore, hiCoins);
     this.particles = {
       trail: [],
       mag: [],
@@ -502,9 +507,16 @@ export class GameEngine {
         const distSq = mdx * mdx + mdy * mdy;
         if (distSq < magnetRadius * magnetRadius && distSq > 0) {
           const dist = Math.sqrt(distSq);
-          const strength = 0.15 * dtFactor * (1 - dist / magnetRadius);
-          coin.x += mdx * strength;
-          coin.y += mdy * strength;
+          const nx = mdx / dist;
+          const ny = mdy / dist;
+          // Pull speed scales from 1.5× world-scroll at the radius edge up to
+          // (1.5× + 8) near the player. The base of 1.5× scroll speed means
+          // magnetised coins always travel faster than the scrolling world,
+          // preventing coins from getting stuck trailing behind the player.
+          const t = 1 - dist / magnetRadius; // 0 at edge → 1 at player centre
+          const pullSpeed = (s.speed * 1.5 + 8 * t) * dtFactor;
+          coin.x += nx * pullSpeed;
+          coin.y += ny * pullSpeed;
         }
       }
     }

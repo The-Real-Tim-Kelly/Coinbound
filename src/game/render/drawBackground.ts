@@ -1,6 +1,6 @@
 import { CANVAS_W, CANVAS_H, INITIAL_SPEED } from '../constants';
 import { BG_THEMES } from '../data/cosmetics';
-import { BG_STARS, SPEED_LINES } from '../data/background';
+import { BG_STAR_GROUPS, SPEED_LINES } from '../data/background';
 
 export function drawBackground(
   ctx: CanvasRenderingContext2D,
@@ -15,29 +15,34 @@ export function drawBackground(
 
   if (activeBg === 'space') {
     const starOff = bgOffset % CANVAS_W;
-    for (const star of BG_STARS) {
-      const sx = (((star.x - starOff) % CANVAS_W) + CANVAS_W) % CANVAS_W;
-      ctx.fillStyle = `rgba(255,255,255,${star.a})`;
+    // Batch by alpha group: 5 fill() calls instead of 80 (one per star).
+    ctx.fillStyle = '#ffffff';
+    for (const group of BG_STAR_GROUPS) {
+      ctx.globalAlpha = group.alpha;
       ctx.beginPath();
-      ctx.arc(sx, star.y, star.r, 0, Math.PI * 2);
+      for (const star of group.stars) {
+        const sx = (((star.x - starOff) % CANVAS_W) + CANVAS_W) % CANVAS_W;
+        ctx.moveTo(sx + star.r, star.y);
+        ctx.arc(sx, star.y, star.r, 0, Math.PI * 2);
+      }
       ctx.fill();
     }
+    ctx.globalAlpha = 1;
   } else if (activeBg === 'neon') {
     const gridOff = bgOffset % 60;
     ctx.strokeStyle = 'rgba(180,0,255,0.07)';
     ctx.lineWidth = 1;
+    // Batch all grid lines into a single path: 1 stroke() instead of ~20.
+    ctx.beginPath();
     for (let gx = -gridOff; gx < CANVAS_W; gx += 60) {
-      ctx.beginPath();
       ctx.moveTo(gx, 0);
       ctx.lineTo(gx, CANVAS_H);
-      ctx.stroke();
     }
     for (let gy = 0; gy < CANVAS_H; gy += 60) {
-      ctx.beginPath();
       ctx.moveTo(0, gy);
       ctx.lineTo(CANVAS_W, gy);
-      ctx.stroke();
     }
+    ctx.stroke();
   } else if (activeBg === 'lava') {
     const lg = ctx.createLinearGradient(0, CANVAS_H * 0.6, 0, CANVAS_H);
     lg.addColorStop(0, 'rgba(0,0,0,0)');

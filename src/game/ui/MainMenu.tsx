@@ -1,5 +1,117 @@
+import { useState } from 'react';
+import type { LeaderboardEntry } from '../types';
+
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  return (
+    d.toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }) +
+    ' ' +
+    d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+  );
+}
+
+const rankColors = ['#ffd700', '#c0c0c0', '#cd7f32', '#aaaaaa', '#888888'];
+
+interface LeaderboardTableProps {
+  entries: LeaderboardEntry[];
+  valueLabel: string;
+  valueColor: string;
+}
+
+function LeaderboardTable({
+  entries,
+  valueLabel,
+  valueColor,
+}: LeaderboardTableProps) {
+  const thStyle: React.CSSProperties = {
+    fontSize: 9,
+    letterSpacing: 1,
+    color: '#556677',
+    paddingBottom: 4,
+    textAlign: 'center',
+    fontWeight: 'bold',
+  };
+  const tdStyle: React.CSSProperties = {
+    fontSize: 'clamp(10px, 2.5vw, 12px)',
+    padding: '3px 2px',
+    textAlign: 'center',
+  };
+
+  if (entries.length === 0) {
+    return (
+      <div
+        style={{
+          color: '#445566',
+          fontSize: 11,
+          textAlign: 'center',
+          padding: '10px 0',
+        }}
+      >
+        No runs yet. Play to set a record!
+      </div>
+    );
+  }
+
+  return (
+    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <thead>
+        <tr>
+          <th style={{ ...thStyle, width: '18%' }}>RANK</th>
+          <th style={{ ...thStyle, width: '26%' }}>{valueLabel}</th>
+          <th style={{ ...thStyle }}>DATE</th>
+        </tr>
+      </thead>
+      <tbody>
+        {entries.map((e, i) => (
+          <tr
+            key={i}
+            style={{
+              background: i === 0 ? 'rgba(255,215,0,0.06)' : 'transparent',
+              borderTop: '1px solid rgba(255,255,255,0.04)',
+            }}
+          >
+            <td
+              style={{
+                ...tdStyle,
+                color: rankColors[i] ?? '#888',
+                fontWeight: 'bold',
+              }}
+            >
+              #{i + 1}
+            </td>
+            <td
+              style={{
+                ...tdStyle,
+                color: valueColor,
+                fontWeight: i === 0 ? 'bold' : 'normal',
+              }}
+            >
+              {e.value}
+            </td>
+            <td
+              style={{
+                ...tdStyle,
+                color: '#667788',
+                fontSize: 'clamp(9px, 2vw, 11px)',
+              }}
+            >
+              {formatDate(e.datetime)}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
 interface MainMenuProps {
   totalCoins: number;
+  scoreLeaderboard: LeaderboardEntry[];
+  coinsLeaderboard: LeaderboardEntry[];
   onPlay: () => void;
   onShop: () => void;
   onSettings: () => void;
@@ -7,10 +119,16 @@ interface MainMenuProps {
 
 export function MainMenu({
   totalCoins,
+  scoreLeaderboard,
+  coinsLeaderboard,
   onPlay,
   onShop,
   onSettings,
 }: MainMenuProps) {
+  const [activeTab, setActiveTab] = useState<'score' | 'coins'>('score');
+  const hasAnyEntry =
+    scoreLeaderboard.length > 0 || coinsLeaderboard.length > 0;
+
   return (
     <div
       style={{
@@ -64,10 +182,68 @@ export function MainMenu({
           style={{
             fontSize: 'clamp(12px, 3vw, 14px)',
             color: '#ffd700',
-            marginBottom: 24,
+            marginBottom: 16,
           }}
         >
           💰 {totalCoins} coins
+        </div>
+
+        {/* Leaderboard */}
+        <div style={{ width: '100%', marginBottom: 18 }}>
+          {/* Tab row */}
+          <div
+            style={{
+              display: 'flex',
+              marginBottom: 8,
+              borderRadius: 8,
+              overflow: 'hidden',
+              border: '1px solid rgba(255,255,255,0.1)',
+            }}
+          >
+            {(['score', 'coins'] as const).map((tab) => {
+              const isActive = activeTab === tab;
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  style={{
+                    flex: 1,
+                    padding: '5px 0',
+                    fontSize: 10,
+                    fontWeight: 'bold',
+                    fontFamily: 'monospace',
+                    letterSpacing: 1,
+                    cursor: 'pointer',
+                    border: 'none',
+                    background: isActive
+                      ? 'rgba(255,215,0,0.15)'
+                      : 'transparent',
+                    color: isActive ? '#ffd700' : '#445566',
+                    transition: 'background 0.15s',
+                  }}
+                >
+                  {tab === 'score' ? '🏆 SCORE' : '💰 COINS'}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Table */}
+          <div style={{ minHeight: hasAnyEntry ? undefined : 40 }}>
+            {activeTab === 'score' ? (
+              <LeaderboardTable
+                entries={scoreLeaderboard}
+                valueLabel="SCORE"
+                valueColor="#00ff88"
+              />
+            ) : (
+              <LeaderboardTable
+                entries={coinsLeaderboard}
+                valueLabel="COINS"
+                valueColor="#ffd700"
+              />
+            )}
+          </div>
         </div>
         <div
           style={{

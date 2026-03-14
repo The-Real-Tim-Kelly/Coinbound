@@ -55,13 +55,13 @@ export function drawCoins(
 
       const orbitR = r + 7 + Math.sin(frameCount * 0.09 + coin.bobOffset) * 1.5;
       const rotAngle = frameCount * 0.055 + coin.bobOffset;
+      ctx.shadowColor = '#ff66ff';
+      ctx.shadowBlur = 7;
       for (let si = 0; si < 4; si++) {
         const sa = rotAngle + (si / 4) * Math.PI * 2;
         const spkX = cx + Math.cos(sa) * orbitR;
         const spkY = cy + Math.sin(sa) * orbitR;
         const spkSize = 1.6 + Math.sin(frameCount * 0.13 + si * 1.57) * 0.5;
-        ctx.shadowColor = '#ff66ff';
-        ctx.shadowBlur = 7;
         ctx.fillStyle = si % 2 === 0 ? '#ffffff' : '#ffaaff';
         ctx.beginPath();
         ctx.arc(spkX, spkY, spkSize, 0, Math.PI * 2);
@@ -282,13 +282,13 @@ export function drawCoins(
     // Spinning orbital dots
     const orbitR = ir + 6 + Math.sin(frameCount * 0.08 + ip.bobOffset) * 1.5;
     const rotAngle = frameCount * 0.065 + ip.bobOffset;
+    ctx.shadowColor = '#00ffee';
+    ctx.shadowBlur = 6;
     for (let di = 0; di < 5; di++) {
       const da = rotAngle + (di / 5) * Math.PI * 2;
       const dx = icx + Math.cos(da) * orbitR;
       const dy = icy + Math.sin(da) * orbitR;
       const dotAlpha = 0.55 + Math.sin(frameCount * 0.15 + di * 1.26) * 0.45;
-      ctx.shadowColor = '#00ffee';
-      ctx.shadowBlur = 6;
       ctx.fillStyle = `rgba(160,255,240,${dotAlpha.toFixed(3)})`;
       ctx.beginPath();
       ctx.arc(dx, dy, 1.8, 0, Math.PI * 2);

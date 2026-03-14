@@ -210,8 +210,8 @@ export function drawPlayerShape(
           li % 3 === 0
             ? `rgba(255,255,80,${pulse.toFixed(2)})`
             : li % 3 === 1
-              ? `rgba(255,80,80,${pulse.toFixed(2)})`
-              : `rgba(80,200,255,${pulse.toFixed(2)})`;
+            ? `rgba(255,80,80,${pulse.toFixed(2)})`
+            : `rgba(80,200,255,${pulse.toFixed(2)})`;
         ctx.beginPath();
         ctx.arc(lx, ly, 2, 0, Math.PI * 2);
         ctx.fill();
@@ -327,7 +327,7 @@ export function drawMagnetField(
   playerCY: number,
 ): void {
   if (magnetLevel <= 0) return;
-  const mRadius = magnetLevel * 60; // MAGNET_RADIUS_PER_LEVEL = 60
+  const mRadius = magnetLevel * 30; // MAGNET_RADIUS_PER_LEVEL = 30
   ctx.save();
   ctx.strokeStyle = 'rgba(0,220,255,0.18)';
   ctx.lineWidth = 1.5;
@@ -453,7 +453,10 @@ export function drawElectricArc(
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
-  ctx.strokeStyle = `rgba(0,200,255,${Math.min(1, flicker * 0.65 * burst).toFixed(3)})`;
+  ctx.strokeStyle = `rgba(0,200,255,${Math.min(
+    1,
+    flicker * 0.65 * burst,
+  ).toFixed(3)})`;
   ctx.lineWidth = 3 * burst;
   ctx.shadowColor = '#00ccff';
   ctx.shadowBlur = 18 * burst;
@@ -465,7 +468,9 @@ export function drawElectricArc(
   ctx.lineTo(arcX + (Math.random() - 0.5) * 6, arcEndY);
   ctx.stroke();
 
-  ctx.strokeStyle = `rgba(210,250,255,${Math.min(1, flicker * 0.88).toFixed(3)})`;
+  ctx.strokeStyle = `rgba(210,250,255,${Math.min(1, flicker * 0.88).toFixed(
+    3,
+  )})`;
   ctx.lineWidth = Math.max(1, burst);
   ctx.shadowBlur = 6 * burst;
   ctx.beginPath();
@@ -720,7 +725,9 @@ export function drawInvincibilityAura(
   ctx.shadowBlur = 0;
   ctx.setLineDash([5, 4]);
   ctx.lineDashOffset = -(frameCount * 2.2);
-  ctx.strokeStyle = `rgba(160,255,245,${(0.65 * pulse * fadeAlpha).toFixed(3)})`;
+  ctx.strokeStyle = `rgba(160,255,245,${(0.65 * pulse * fadeAlpha).toFixed(
+    3,
+  )})`;
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.arc(playerCX, playerCY, baseR - 7, 0, Math.PI * 2);

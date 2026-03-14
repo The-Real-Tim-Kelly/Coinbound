@@ -77,17 +77,18 @@ export function drawObstacles(
         ctx.beginPath();
         ctx.rect(obs.x, slab.y, obs.w, slab.h);
         ctx.clip();
+        // Batch all diamond shapes into one path: 1 fill() instead of N.
+        ctx.beginPath();
         for (let dy = slab.y - ds; dy < slab.y + slab.h + ds; dy += ds) {
           for (let dx = obs.x - ds; dx < obs.x + obs.w + ds; dx += ds) {
-            ctx.beginPath();
             ctx.moveTo(dx + ds / 2, dy);
             ctx.lineTo(dx + ds, dy + ds / 2);
             ctx.lineTo(dx + ds / 2, dy + ds);
             ctx.lineTo(dx, dy + ds / 2);
             ctx.closePath();
-            ctx.fill();
           }
         }
+        ctx.fill();
         ctx.restore();
         ctx.fillStyle = 'rgba(255,100,60,0.70)';
         ctx.fillRect(obs.x, edgeY - (isCeiling ? 4 : 0), obs.w, 4);

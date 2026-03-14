@@ -91,6 +91,10 @@ body,
   background-size: 100% 200%;
   animation: cbBgDrift 12s ease-in-out infinite,
     cbGlowPulse 6s ease-in-out infinite;
+  /* Force its own GPU compositor layer so background-position animation
+     doesn't repaint the main game canvas layer. */
+  will-change: opacity;
+  transform: translateZ(0);
 }
 
 /* Decorative corner accent dots — pure CSS neon corners */

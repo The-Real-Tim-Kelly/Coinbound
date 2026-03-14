@@ -8,12 +8,19 @@ import {
   POWER_SURGE_COSTS,
 } from '../constants';
 import { CosmeticType } from '../types';
+import type { LeaderboardEntry } from '../types';
 
 export interface UseStoreReturn {
   // Coins
   totalCoins: number;
   totalCoinsRef: React.MutableRefObject<number>;
   addRunCoins: (earned: number) => void;
+  // Leaderboards
+  scoreLeaderboard: LeaderboardEntry[];
+  coinsLeaderboard: LeaderboardEntry[];
+  bestScoreRef: React.MutableRefObject<number>;
+  bestCoinsRef: React.MutableRefObject<number>;
+  updateLeaderboards: (score: number, coins: number) => void;
   // Upgrades
   magnetLevel: number;
   magnetLevelRef: React.MutableRefObject<number>;
@@ -50,6 +57,27 @@ function lsInt(key: string, fallback: number): number {
   return parseInt(localStorage.getItem(key) ?? String(fallback), 10);
 }
 
+const LEADERBOARD_SIZE = 5;
+
+function loadLeaderboard(key: string): LeaderboardEntry[] {
+  const stored = localStorage.getItem(key);
+  if (!stored) return [];
+  try {
+    return JSON.parse(stored) as LeaderboardEntry[];
+  } catch {
+    return [];
+  }
+}
+
+function insertLeaderboard(
+  entries: LeaderboardEntry[],
+  value: number,
+): LeaderboardEntry[] {
+  return [...entries, { value, datetime: new Date().toISOString() }]
+    .sort((a, b) => b.value - a.value)
+    .slice(0, LEADERBOARD_SIZE);
+}
+
 export function useStore(): UseStoreReturn {
   // ── Coins ────────────────────────────────────────────────────────────────
   const totalCoinsRef = useRef(lsInt('coinbound_total_coins', 0));
@@ -67,6 +95,42 @@ export function useStore(): UseStoreReturn {
     },
     [setTotalCoins],
   );
+
+  // ── Leaderboards ─────────────────────────────────────────────────────────
+  const _initScores = loadLeaderboard('coinbound_score_leaderboard');
+  const _initCoins = loadLeaderboard('coinbound_coins_leaderboard');
+  const scoreLeaderboardRef = useRef(_initScores);
+  const [scoreLeaderboard, setScoreLeaderboard] = useState(
+    scoreLeaderboardRef.current,
+  );
+
+  const coinsLeaderboardRef = useRef(_initCoins);
+  const [coinsLeaderboard, setCoinsLeaderboard] = useState(
+    coinsLeaderboardRef.current,
+  );
+
+  const bestScoreRef = useRef(_initScores[0]?.value ?? 0);
+  const bestCoinsRef = useRef(_initCoins[0]?.value ?? 0);
+
+  const updateLeaderboards = useCallback((score: number, coins: number) => {
+    const newScores = insertLeaderboard(scoreLeaderboardRef.current, score);
+    scoreLeaderboardRef.current = newScores;
+    bestScoreRef.current = newScores[0]?.value ?? 0;
+    localStorage.setItem(
+      'coinbound_score_leaderboard',
+      JSON.stringify(newScores),
+    );
+    setScoreLeaderboard(newScores);
+
+    const newCoins = insertLeaderboard(coinsLeaderboardRef.current, coins);
+    coinsLeaderboardRef.current = newCoins;
+    bestCoinsRef.current = newCoins[0]?.value ?? 0;
+    localStorage.setItem(
+      'coinbound_coins_leaderboard',
+      JSON.stringify(newCoins),
+    );
+    setCoinsLeaderboard(newCoins);
+  }, []);
 
   // ── Magnet upgrade ────────────────────────────────────────────────────────
   const magnetLevelRef = useRef(lsInt('coinbound_magnet_level', 0));
@@ -191,6 +255,11 @@ export function useStore(): UseStoreReturn {
     totalCoins,
     totalCoinsRef,
     addRunCoins,
+    scoreLeaderboard,
+    coinsLeaderboard,
+    bestScoreRef,
+    bestCoinsRef,
+    updateLeaderboards,
     magnetLevel,
     magnetLevelRef,
     luckyCharmLevel,

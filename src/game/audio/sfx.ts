@@ -271,3 +271,108 @@ export function playInvincibilityPickupSfx(
   ho.start(t0);
   ho.stop(t0 + 0.72);
 }
+
+// ─── End-of-run fanfare ───────────────────────────────────────────────────────
+// A short celebratory 4-note ascending arpeggio: C5 → E5 → G5 → C6
+export function playRunFanfareSfx(ac: AudioContext, sfxGain: GainNode): void {
+  const t0 = ac.currentTime;
+  const notes = [523, 659, 784, 1047]; // C5 E5 G5 C6
+  notes.forEach((freq, i) => {
+    const t = t0 + i * 0.13;
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.14, t + 0.018);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.42);
+    g.connect(sfxGain);
+    const o = ac.createOscillator();
+    o.type = 'triangle';
+    o.frequency.value = freq;
+    o.connect(g);
+    o.start(t);
+    o.stop(t + 0.45);
+  });
+}
+
+// ─── New-record fanfare ───────────────────────────────────────────────────────
+// Grander 5-note arpeggio with shimmer overtones: C5 → E5 → G5 → B5 → E6
+export function playNewRecordSfx(ac: AudioContext, sfxGain: GainNode): void {
+  const t0 = ac.currentTime;
+  const notes = [523, 659, 784, 988, 1319]; // C5 E5 G5 B5 E6
+  notes.forEach((freq, i) => {
+    const t = t0 + i * 0.11;
+    // Main tone
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.15, t + 0.015);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.48);
+    g.connect(sfxGain);
+    const o = ac.createOscillator();
+    o.type = 'triangle';
+    o.frequency.value = freq;
+    o.connect(g);
+    o.start(t);
+    o.stop(t + 0.5);
+    // Shimmer overtone (octave up)
+    const gh = ac.createGain();
+    gh.gain.setValueAtTime(0, t);
+    gh.gain.linearRampToValueAtTime(0.055, t + 0.015);
+    gh.gain.exponentialRampToValueAtTime(0.001, t + 0.32);
+    gh.connect(sfxGain);
+    const oh = ac.createOscillator();
+    oh.type = 'sine';
+    oh.frequency.value = freq * 2;
+    oh.connect(gh);
+    oh.start(t);
+    oh.stop(t + 0.34);
+  });
+}
+
+// ─── Bank coin deposit tick ───────────────────────────────────────────────────
+// Satisfying "ka-ching" played once per batch of coins landing in the bank.
+// Two metallic tones: a bright transient click (high square) followed by a
+// warm ring-decay (sine sweep), giving a realistic coin-on-metal feel.
+export function playBankCoinSfx(ac: AudioContext, sfxGain: GainNode): void {
+  const t0 = ac.currentTime;
+
+  // ── High transient "tick" (square, 2 kHz → decays fast) ──
+  const gc = ac.createGain();
+  gc.gain.setValueAtTime(0, t0);
+  gc.gain.linearRampToValueAtTime(0.09, t0 + 0.004);
+  gc.gain.exponentialRampToValueAtTime(0.001, t0 + 0.055);
+  gc.connect(sfxGain);
+  const oc = ac.createOscillator();
+  oc.type = 'square';
+  oc.frequency.setValueAtTime(2200, t0);
+  oc.frequency.exponentialRampToValueAtTime(1600, t0 + 0.04);
+  oc.connect(gc);
+  oc.start(t0);
+  oc.stop(t0 + 0.06);
+
+  // ── Warm sine ring (C#6 → E6, 277 → 330 Hz * 4 octaves up) ──
+  const gs = ac.createGain();
+  gs.gain.setValueAtTime(0, t0);
+  gs.gain.linearRampToValueAtTime(0.11, t0 + 0.007);
+  gs.gain.exponentialRampToValueAtTime(0.001, t0 + 0.28);
+  gs.connect(sfxGain);
+  const os = ac.createOscillator();
+  os.type = 'sine';
+  os.frequency.setValueAtTime(1109, t0);      // C#6
+  os.frequency.exponentialRampToValueAtTime(1319, t0 + 0.07); // E6
+  os.connect(gs);
+  os.start(t0);
+  os.stop(t0 + 0.3);
+
+  // ── Harmonic shimmer overtone (triangle, octave above sine) ──
+  const gh = ac.createGain();
+  gh.gain.setValueAtTime(0, t0);
+  gh.gain.linearRampToValueAtTime(0.045, t0 + 0.01);
+  gh.gain.exponentialRampToValueAtTime(0.001, t0 + 0.18);
+  gh.connect(sfxGain);
+  const oh = ac.createOscillator();
+  oh.type = 'triangle';
+  oh.frequency.setValueAtTime(2218, t0);
+  oh.frequency.exponentialRampToValueAtTime(2638, t0 + 0.06);
+  oh.connect(gh);
+  oh.start(t0);
+  oh.stop(t0 + 0.2);
+}
