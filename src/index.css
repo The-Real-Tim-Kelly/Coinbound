@@ -4,12 +4,7 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  /* Suppress the mobile browser's default blue tap-highlight overlay so the
-     full-screen container div does not flash blue on every touch. Visual
-     touch feedback is handled by the canvas cube pulse instead. */
   -webkit-tap-highlight-color: transparent;
-  /* Prevent iOS from showing the text-selection / copy-paste callout when
-     the player spams taps or holds a finger on the screen. */
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
@@ -21,7 +16,119 @@ body,
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #000;
+  background: #04000e;
+}
+
+/* ── Coinbound arcade background ─────────────────────────────────────────── */
+
+@keyframes cbBgDrift {
+  0% {
+    background-position: 50% 0%;
+  }
+  50% {
+    background-position: 50% 100%;
+  }
+  100% {
+    background-position: 50% 0%;
+  }
+}
+
+@keyframes cbGlowPulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes cbScanline {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(100vh);
+  }
+}
+
+.coinbound-root {
+  /* Deep arcade-space gradient as the base fill */
+  background: radial-gradient(
+      ellipse 90% 55% at 50% -5%,
+      rgba(95, 20, 230, 0.22) 0%,
+      transparent 65%
+    ),
+    radial-gradient(
+      ellipse 60% 40% at 15% 85%,
+      rgba(255, 120, 0, 0.07) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 60% 40% at 85% 85%,
+      rgba(0, 100, 255, 0.07) 0%,
+      transparent 60%
+    ),
+    linear-gradient(180deg, #0d0020 0%, #07000f 40%, #020008 100%);
+}
+
+/* Subtle animated glow layer — pure CSS, no JS, zero perf cost */
+.coinbound-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: radial-gradient(
+      ellipse 80% 60% at 50% 10%,
+      rgba(110, 30, 255, 0.14) 0%,
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 50% 35% at 50% 90%,
+      rgba(30, 60, 200, 0.1) 0%,
+      transparent 70%
+    );
+  background-size: 100% 200%;
+  animation: cbBgDrift 12s ease-in-out infinite,
+    cbGlowPulse 6s ease-in-out infinite;
+}
+
+/* Decorative corner accent dots — pure CSS neon corners */
+.coinbound-corner {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0.45;
+}
+.coinbound-corner-tl {
+  top: 6px;
+  left: 6px;
+  border-top: 2px solid #9955ff;
+  border-left: 2px solid #9955ff;
+  border-radius: 3px 0 0 0;
+}
+.coinbound-corner-tr {
+  top: 6px;
+  right: 6px;
+  border-top: 2px solid #9955ff;
+  border-right: 2px solid #9955ff;
+  border-radius: 0 3px 0 0;
+}
+.coinbound-corner-bl {
+  bottom: 6px;
+  left: 6px;
+  border-bottom: 2px solid #9955ff;
+  border-left: 2px solid #9955ff;
+  border-radius: 0 0 0 3px;
+}
+.coinbound-corner-br {
+  bottom: 6px;
+  right: 6px;
+  border-bottom: 2px solid #9955ff;
+  border-right: 2px solid #9955ff;
+  border-radius: 0 0 3px 0;
 }
 
 a {

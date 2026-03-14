@@ -213,6 +213,32 @@ export class GameEngine {
     this.particles.trail.length = 0;
   }
 
+  // ── Pause / resume ────────────────────────────────────────────────────────
+
+  private _paused = false;
+
+  get paused(): boolean {
+    return this._paused;
+  }
+
+  /**
+   * Freeze the simulation in-place.  The RAF loop keeps running so the
+   * canvas continues to display the frozen frame; update() simply becomes
+   * a no-op until resume() is called.
+   */
+  pause(): void {
+    this._paused = true;
+    // Release player input so gravity doesn't linger while paused.
+    this._isHolding = false;
+  }
+
+  /** Unfreeze the simulation.  Caller must reset lastTimeRef to 0 so the
+   * first resumed frame uses a safe dt (1/60) instead of the full time
+   * the menu was open. */
+  resume(): void {
+    this._paused = false;
+  }
+
   // ── Main update ───────────────────────────────────────────────────────────
 
   /**
@@ -225,6 +251,10 @@ export class GameEngine {
    *                  independent without touching any magic numbers.
    */
   update(dtFactor: number): void {
+    // While paused the renderer still calls us every frame so the canvas
+    // continues to show the frozen game state.  Do nothing except return.
+    if (this._paused) return;
+
     const s = this.state;
 
     // Background scroll advances only during active, non-game-over play.

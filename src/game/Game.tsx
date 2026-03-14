@@ -71,7 +71,6 @@ import { MainMenu } from './ui/MainMenu';
 import { GameOverScreen } from './ui/GameOverScreen';
 import { ShopModal } from './ui/ShopModal';
 import { SettingsModal } from './ui/SettingsModal';
-import { InGameButtons } from './ui/InGameButtons';
 import type { CosmeticType } from './types';
 
 //
@@ -204,6 +203,44 @@ export default function Game() {
     },
     [store],
   );
+
+  //  Pause helpers — pause engine when opening a menu mid-run, resume on close
+
+  const openShop = useCallback(() => {
+    const engine = engineRef.current!;
+    if (engine.state.started && !engine.state.gameOver) {
+      engine.pause();
+      audio.stopMagnetHumRef.current();
+    }
+    setShowShop(true);
+  }, [audio]);
+
+  const closeShop = useCallback(() => {
+    setShowShop(false);
+    const engine = engineRef.current!;
+    if (engine.paused) {
+      engine.resume();
+      lastTimeRef.current = 0; // reset dt so first resumed frame uses 1/60
+    }
+  }, []);
+
+  const openSettings = useCallback(() => {
+    const engine = engineRef.current!;
+    if (engine.state.started && !engine.state.gameOver) {
+      engine.pause();
+      audio.stopMagnetHumRef.current();
+    }
+    setShowSettings(true);
+  }, [audio]);
+
+  const closeSettings = useCallback(() => {
+    setShowSettings(false);
+    const engine = engineRef.current!;
+    if (engine.paused) {
+      engine.resume();
+      lastTimeRef.current = 0;
+    }
+  }, []);
 
   //  Animation-frame loop
 
@@ -441,92 +478,214 @@ export default function Game() {
 
   const isPlaying = !isMenuVisible && !gameOverData;
 
+  // Shared button style for the top bar
+  const topBarBtnStyle: React.CSSProperties = {
+    background: 'rgba(255,255,255,0.07)',
+    border: '1px solid rgba(255,255,255,0.14)',
+    borderRadius: 12,
+    color: '#e0d8ff',
+    fontSize: 22,
+    lineHeight: 1,
+    cursor: 'pointer',
+    padding: '10px 14px',
+    minWidth: 48,
+    minHeight: 48,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    WebkitTapHighlightColor: 'transparent',
+    flexShrink: 0,
+  };
+
   return (
     <div
+      className="coinbound-root"
       style={{
         position: 'relative',
         width: '100vw',
         height: '100vh',
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: '#000',
+        flexDirection: 'column',
         overflow: 'hidden',
         userSelect: 'none',
-        // Belt-and-suspenders: suppress the mobile browser's blue tap-highlight
-        // on this element in addition to the global CSS rule in index.css.
         WebkitTapHighlightColor: 'transparent',
-        // Disable all default touch gestures on the container so the game
-        // captures every pointer event cleanly on mobile.
-        touchAction: 'none',
       }}
-      onPointerDown={
-        isPlaying
-          ? (e) => {
-              // Retain pointer capture so pointerup fires even if the finger
-              // travels outside the element.
-              e.currentTarget.setPointerCapture(e.pointerId);
-              startHold();
-            }
-          : undefined
-      }
-      onPointerUp={isPlaying ? endHold : undefined}
-      onPointerLeave={isPlaying ? endHold : undefined}
-      onPointerCancel={isPlaying ? endHold : undefined}
-      // Prevent the iOS long-press context menu (copy/paste/select callout)
-      // from appearing during gameplay. Safe on desktop — right-click still
-      // works in menus because those elements stop propagation.
       onContextMenu={(e) => e.preventDefault()}
     >
-      {/* Single canvas for all dynamic gameplay rendering */}
-      <canvas
-        ref={canvasRef}
-        width={CANVAS_W}
-        height={CANVAS_H}
+      {/* ── Animated arcade background ── */}
+      <div className="coinbound-bg" aria-hidden="true" />
+
+      {/* ── Top UI bar ── */}
+      {/* The outer div absorbs the status-bar / notch height via
+          env(safe-area-inset-top) so buttons always appear below the
+          system UI. The inner row has a fixed 56 px height for the controls. */}
+      <div
         style={{
-          maxWidth: '100vw',
-          maxHeight: '100vh',
-          imageRendering: 'pixelated',
-          cursor: 'pointer',
-          display: 'block',
+          flexShrink: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'flex-end',
+          // env(safe-area-inset-top) provides the exact status-bar height on
+          // Android (Capacitor sets viewport-fit=cover).  The max() fallback
+          // ensures at least 24 px on older WebViews that ignore env().
+          paddingTop: 'max(env(safe-area-inset-top, 0px), 24px)',
+          background: 'rgba(4,0,16,0.72)',
+          borderBottom: '1px solid rgba(120,60,255,0.18)',
+          boxShadow: '0 2px 18px rgba(0,0,0,0.5)',
+          zIndex: 15,
+          position: 'relative',
+        }}
+      >
+        {/* Inner control row — always 56 px tall */}
+        <div
+          style={{
+            height: 56,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '0 14px',
+            gap: 8,
+          }}
+        >
+          {/* Settings */}
+          <button
+            onClick={showSettings ? closeSettings : openSettings}
+            style={topBarBtnStyle}
+            aria-label="Settings"
+          >
+            ⚙️
+          </button>
+
+          {/* Coin counter */}
+          <div
+            style={{
+              flex: 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 7,
+            }}
+          >
+            <span
+              style={{
+                fontSize: 20,
+                filter: 'drop-shadow(0 0 6px #ffd700)',
+                lineHeight: 1,
+              }}
+            >
+              🪙
+            </span>
+            <span
+              style={{
+                color: '#ffd700',
+                fontFamily: 'monospace',
+                fontWeight: 'bold',
+                fontSize: 'clamp(16px, 4.5vw, 22px)',
+                letterSpacing: 1,
+                textShadow: '0 0 10px rgba(255,215,0,0.6)',
+              }}
+            >
+              {store.totalCoins}
+            </span>
+          </div>
+
+          {/* Shop */}
+          <button
+            onClick={showShop ? closeShop : openShop}
+            style={topBarBtnStyle}
+            aria-label="Shop"
+          >
+            🛒
+          </button>
+        </div>
+      </div>
+
+      {/* ── Canvas area — fills remaining space ── */}
+      <div
+        style={{
+          flex: 1,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          position: 'relative',
+          overflow: 'hidden',
           touchAction: 'none',
         }}
-      />
-
-      {/*  React DOM overlays (UI only  no gameplay rendering here)  */}
-
-      {isMenuVisible && !showShop && !showSettings && (
-        <MainMenu
-          totalCoins={store.totalCoins}
-          onPlay={startGame}
-          onShop={() => setShowShop(true)}
-          onSettings={() => setShowSettings(true)}
+        onPointerDown={
+          isPlaying
+            ? (e) => {
+                e.currentTarget.setPointerCapture(e.pointerId);
+                startHold();
+              }
+            : undefined
+        }
+        onPointerUp={isPlaying ? endHold : undefined}
+        onPointerLeave={isPlaying ? endHold : undefined}
+        onPointerCancel={isPlaying ? endHold : undefined}
+      >
+        {/* ── Decorative corner accents ── */}
+        <div
+          className="coinbound-corner coinbound-corner-tl"
+          aria-hidden="true"
         />
-      )}
-
-      {gameOverData && !showShop && !showSettings && (
-        <GameOverScreen
-          score={gameOverData.score}
-          coins={gameOverData.coins}
-          hiScore={gameOverData.hiScore}
-          hiCoins={gameOverData.hiCoins}
-          onRetry={retry}
-          onShop={() => setShowShop(true)}
-          onMenu={goToMenu}
+        <div
+          className="coinbound-corner coinbound-corner-tr"
+          aria-hidden="true"
         />
-      )}
-
-      {isPlaying && (
-        <InGameButtons
-          muted={audio.muted}
-          onShop={() => setShowShop((v) => !v)}
-          onSettings={() => setShowSettings((v) => !v)}
+        <div
+          className="coinbound-corner coinbound-corner-bl"
+          aria-hidden="true"
         />
-      )}
+        <div
+          className="coinbound-corner coinbound-corner-br"
+          aria-hidden="true"
+        />
 
+        {/* Single canvas for all dynamic gameplay rendering */}
+        <canvas
+          ref={canvasRef}
+          width={CANVAS_W}
+          height={CANVAS_H}
+          style={{
+            maxWidth: '100%',
+            maxHeight: '100%',
+            imageRendering: 'pixelated',
+            cursor: 'pointer',
+            display: 'block',
+            touchAction: 'none',
+            position: 'relative',
+            zIndex: 1,
+          }}
+        />
+
+        {/* React DOM overlays (menus/game-over — fixed so they cover the full viewport) */}
+
+        {isMenuVisible && !showShop && !showSettings && (
+          <MainMenu
+            totalCoins={store.totalCoins}
+            onPlay={startGame}
+            onShop={openShop}
+            onSettings={openSettings}
+          />
+        )}
+
+        {gameOverData && !showShop && !showSettings && (
+          <GameOverScreen
+            score={gameOverData.score}
+            coins={gameOverData.coins}
+            hiScore={gameOverData.hiScore}
+            hiCoins={gameOverData.hiCoins}
+            onRetry={retry}
+            onShop={openShop}
+            onMenu={goToMenu}
+          />
+        )}
+      </div>
+
+      {/* Modals — use position:fixed so they cover everything including the top bar */}
       <ShopModal
         visible={showShop}
-        onClose={() => setShowShop(false)}
+        onClose={closeShop}
         totalCoins={store.totalCoins}
         magnetLevel={store.magnetLevel}
         onBuyMagnet={store.buyMagnetUpgrade}
@@ -548,7 +707,7 @@ export default function Game() {
 
       <SettingsModal
         visible={showSettings}
-        onClose={() => setShowSettings(false)}
+        onClose={closeSettings}
         muted={audio.muted}
         musicVolume={audio.musicVolume}
         sfxVolume={audio.sfxVolume}
