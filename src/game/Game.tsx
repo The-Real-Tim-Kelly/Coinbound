@@ -324,7 +324,7 @@ export default function Game() {
         const prevBestScore = store.bestScoreRef.current;
         const prevBestCoins = store.bestCoinsRef.current;
         store.addRunCoins(s.coinCount);
-        store.updateLeaderboards(s.hiScore, s.hiCoins);
+        store.updateLeaderboards(s.score, s.coinCount);
         audio.playCrashSfxRef.current();
         // Stash data; GameOverScreen is shown after the death animation finishes.
         pendingGameOverRef.current = {
