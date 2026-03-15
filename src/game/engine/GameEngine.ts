@@ -43,6 +43,7 @@ import {
   INVINCIBILITY_DURATION,
   POWER_UP_GLOBAL_COOLDOWN_MIN,
   POWER_UP_GLOBAL_COOLDOWN_MAX,
+  BASE_MAGNET_RADIUS,
   MAGNET_RADIUS_PER_LEVEL,
   LUCKY_CHARM_BONUS_PER_LEVEL,
   LUCKY_COIN_CHECK_INTERVAL,
@@ -498,8 +499,8 @@ export class GameEngine {
     // ── Coin magnet attraction ────────────────────────────────────────────
     const pcx = PLAYER_X + PLAYER_SIZE / 2;
     const pcy = s.playerY + PLAYER_SIZE / 2;
-    const magnetRadius = this._config.magnetLevel * MAGNET_RADIUS_PER_LEVEL;
-    if (magnetRadius > 0) {
+    const magnetRadius = BASE_MAGNET_RADIUS + this._config.magnetLevel * MAGNET_RADIUS_PER_LEVEL;
+    if (this._config.magnetLevel > 0) {
       for (const coin of s.coins) {
         if (coin.collected) continue;
         const mdx = pcx - coin.x;

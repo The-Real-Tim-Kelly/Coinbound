@@ -63,7 +63,8 @@ export const POWER_UP_GLOBAL_COOLDOWN_MAX = 600; // ~10 s at 60 fps
 
 // ─── Upgrades ────────────────────────────────────────────────────────────────
 export const MAGNET_MAX_LEVEL = 5;
-export const MAGNET_RADIUS_PER_LEVEL = 30; // px of attraction radius per level
+export const BASE_MAGNET_RADIUS = 40;       // base attraction radius once any magnet level is owned
+export const MAGNET_RADIUS_PER_LEVEL = 25;  // additional px per upgrade level
 export const MAGNET_COSTS = [20, 50, 100, 200, 400]; // coin cost per upgrade level
 
 export const LUCKY_CHARM_MAX_LEVEL = 5;
