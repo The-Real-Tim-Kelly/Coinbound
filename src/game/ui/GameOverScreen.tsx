@@ -285,6 +285,10 @@ interface GameOverScreenProps {
   getWalletPos: () => { x: number; y: number } | null;
   /** Notifies parent of coins to add to the wallet display (gradual increment) */
   onWalletIncrement: (delta: number) => void;
+  /** True when the animation has already played this run — skip it on remount */
+  skipCoinAnimation: boolean;
+  /** Called synchronously when the animation is about to start so the parent can set the flag */
+  onCoinAnimationPlayed: () => void;
 }
 
 export function GameOverScreen({
@@ -301,6 +305,8 @@ export function GameOverScreen({
   onPlayBankCoin,
   getWalletPos,
   onWalletIncrement,
+  skipCoinAnimation,
+  onCoinAnimationPlayed,
 }: GameOverScreenProps) {
   const isNewRecord = isNewScore || isNewCoins;
 
@@ -308,14 +314,16 @@ export function GameOverScreen({
   const onPlayFanfareRef = useRef(onPlayFanfare);
   const onPlayBankCoinRef = useRef(onPlayBankCoin);
   const onWalletIncrementRef = useRef(onWalletIncrement);
+  const onCoinAnimationPlayedRef = useRef(onCoinAnimationPlayed);
   useEffect(() => {
     onWalletIncrementRef.current = onWalletIncrement;
   }, [onWalletIncrement]);
 
-  const [displayCoins, setDisplayCoins] = useState(0);
-  // tickKey increments on each display-counter tick to re-trigger css animation
-  const [tickKey, setTickKey] = useState(0);
-  const [showRecord, setShowRecord] = useState(false);
+  // When remounting after the shop/settings close, immediately restore the
+  // final values so we don't show a blank state while skipping the animation.
+  const [showRecord, setShowRecord] = useState(
+    () => skipCoinAnimation && isNewRecord,
+  );
   const [flyVisible, setFlyVisible] = useState(false);
   // bankGlowKey re-keys the pulse overlay on each batch landing
   const [bankGlowKey, setBankGlowKey] = useState(0);
@@ -329,6 +337,9 @@ export function GameOverScreen({
     y: number;
   } | null>(null);
   const coinsCellRef = useRef<HTMLDivElement>(null);
+  // Tracks how many coins have already been sent to the wallet during the animation.
+  // Initialized to `coins` when skipping (already fully paid out on a prior mount).
+  const walletSentRef = useRef(skipCoinAnimation ? coins : 0);
 
   // How many coins each visual batch represents (for wallet increment)
   const numBatches = Math.max(
@@ -352,11 +363,25 @@ export function GameOverScreen({
   const handleBatchLand = useCallback(() => {
     onPlayBankCoinRef.current();
     setBankGlowKey((k) => k + 1);
-    onWalletIncrementRef.current(coinsPerBatch);
-  }, [coinsPerBatch]);
+    // Cap the delta so accumulated sends never exceed the total run coins.
+    const delta = Math.min(coinsPerBatch, coins - walletSentRef.current);
+    if (delta > 0) {
+      walletSentRef.current += delta;
+      onWalletIncrementRef.current(delta);
+    }
+  }, [coinsPerBatch, coins]);
 
   useEffect(() => {
     ensureKeyframes();
+
+    if (skipCoinAnimation) {
+      // Initial state already set via lazy useState — nothing else to do.
+      return;
+    }
+
+    // Mark as played before any timers fire so the flag is set even if the
+    // component unmounts (e.g. user opens the shop) before they complete.
+    onCoinAnimationPlayedRef.current();
     onPlayFanfareRef.current();
 
     if (coins === 0) {
@@ -364,32 +389,25 @@ export function GameOverScreen({
       return;
     }
 
-    // Trigger canvas coin flight slightly before the counter starts
+    // Trigger canvas coin flight.
     const flyTimer = setTimeout(() => setFlyVisible(true), 300);
 
-    const steps = Math.min(coins, 30);
-    const increment = Math.ceil(coins / steps);
-    const intervalMs = Math.round(1400 / steps);
-
-    let current = 0;
-    let intervalId: ReturnType<typeof setInterval>;
-
-    const startTimer = setTimeout(() => {
-      intervalId = setInterval(() => {
-        current = Math.min(current + increment, coins);
-        setDisplayCoins(current);
-        setTickKey((k) => k + 1);
-        if (current >= coins) {
-          clearInterval(intervalId);
-          if (isNewRecord) setTimeout(() => setShowRecord(true), 220);
-        }
-      }, intervalMs);
-    }, 420);
+    // Show NEW RECORD badge after the full flight animation completes.
+    let recordTimer: ReturnType<typeof setTimeout> | undefined;
+    if (isNewRecord) {
+      recordTimer = setTimeout(() => setShowRecord(true), 2100);
+    }
 
     return () => {
       clearTimeout(flyTimer);
-      clearTimeout(startTimer);
-      clearInterval(intervalId!);
+      clearTimeout(recordTimer);
+      // If the animation was interrupted (e.g. shop/settings opened), flush any
+      // coins that hadn't visually landed yet so the wallet always ends correct.
+      const remaining = coins - walletSentRef.current;
+      if (remaining > 0) {
+        walletSentRef.current = coins;
+        onWalletIncrementRef.current(remaining);
+      }
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -494,9 +512,8 @@ export function GameOverScreen({
               { label: 'SCORE', value: score, highlight: isNewScore },
               {
                 label: 'COINS',
-                value: displayCoins,
+                value: coins,
                 highlight: isNewCoins,
-                animKey: tickKey,
               },
               { label: 'BEST', value: hiScore },
               { label: 'MOST COINS', value: hiCoins },

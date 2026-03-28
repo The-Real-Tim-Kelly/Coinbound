@@ -499,7 +499,8 @@ export class GameEngine {
     // ── Coin magnet attraction ────────────────────────────────────────────
     const pcx = PLAYER_X + PLAYER_SIZE / 2;
     const pcy = s.playerY + PLAYER_SIZE / 2;
-    const magnetRadius = BASE_MAGNET_RADIUS + this._config.magnetLevel * MAGNET_RADIUS_PER_LEVEL;
+    const magnetRadius =
+      BASE_MAGNET_RADIUS + this._config.magnetLevel * MAGNET_RADIUS_PER_LEVEL;
     if (this._config.magnetLevel > 0) {
       for (const coin of s.coins) {
         if (coin.collected) continue;

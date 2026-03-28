@@ -139,12 +139,21 @@ export default function Game() {
   const [showSettings, setShowSettings] = useState(false);
   const [isMenuVisible, setIsMenuVisible] = useState(true);
   const [gameOverData, setGameOverData] = useState<GameOverData | null>(null);
+  const [hasPlayedPostGameCoinAnimation, setHasPlayedPostGameCoinAnimation] =
+    useState(false);
 
-  // Wallet animation — top-bar coin counter animates during coin flight
-  // walletLanded: coins that have visually arrived at the wallet this run (resets on retry/menu)
-  // walletPulseKey: toggled on each batch land to re-trigger the CSS pulse animation
+  // Wallet display — two separate values:
+  //   displayWalletCoins: what the top-bar shows (animates during coin flight)
+  //   store.totalCoins / localStorage: the real total, updated immediately on run end
   const walletCoinRef = useRef<HTMLSpanElement>(null);
-  const [walletLanded, setWalletLanded] = useState(0);
+  // Stable alias so callbacks can read totalCoinsRef.current without listing
+  // the whole `store` object as a dependency (same pattern as engineRef).
+  const { totalCoinsRef } = store;
+  // Initialised from localStorage so the display is correct on first render.
+  // Read directly from storage to avoid touching a ref during render.
+  const [displayWalletCoins, setDisplayWalletCoins] = useState(() =>
+    parseInt(localStorage.getItem('coinbound_total_coins') ?? '0', 10),
+  );
   const [walletPulseKey, setWalletPulseKey] = useState(0);
 
   // Stable callback — GameOverScreen calls this to get the wallet element's
@@ -157,17 +166,12 @@ export default function Game() {
 
   const handleWalletIncrement = useCallback((delta: number) => {
     setWalletPulseKey((k) => k + 1);
-    setWalletLanded((prev) => prev + delta);
+    setDisplayWalletCoins((prev) => prev + delta);
   }, []);
 
-  // Derived display value — pre-run total + however many coins have landed so far,
-  // bounded by totalCoins. Falls back to store.totalCoins during normal gameplay.
-  const walletCoinsDisplay = gameOverData
-    ? Math.min(
-        store.totalCoins - gameOverData.coins + walletLanded,
-        store.totalCoins,
-      )
-    : store.totalCoins;
+  // The top-bar always shows displayWalletCoins — it starts at the pre-run
+  // total, then increments visually as coins land during the animation.
+  const walletCoinsDisplay = displayWalletCoins;
 
   //  Navigation helpers
 
@@ -181,6 +185,7 @@ export default function Game() {
     setShowShop(false);
     setShowSettings(false);
     setGameOverData(null);
+    setHasPlayedPostGameCoinAnimation(false);
     audio.startMusicRef.current();
   }, [audio.startMusicRef]);
 
@@ -194,10 +199,13 @@ export default function Game() {
     setShowShop(false);
     setShowSettings(false);
     setGameOverData(null);
-    setWalletLanded(0);
     setWalletPulseKey(0);
+    setHasPlayedPostGameCoinAnimation(false);
+    // Snap display to the true wallet so the top bar is always accurate at
+    // the start of a new run (e.g. if the player bought something mid-screen).
+    setDisplayWalletCoins(totalCoinsRef.current);
     audio.startMusicRef.current();
-  }, [audio.startMusicRef]);
+  }, [audio.startMusicRef, totalCoinsRef]);
 
   const goToMenu = useCallback(() => {
     const engine = engineRef.current!;
@@ -208,10 +216,11 @@ export default function Game() {
     setShowShop(false);
     setShowSettings(false);
     setGameOverData(null);
-    setWalletLanded(0);
     setWalletPulseKey(0);
+    // Snap display to the true wallet so the top bar is always accurate.
+    setDisplayWalletCoins(totalCoinsRef.current);
     audio.stopMusicRef.current();
-  }, [audio.stopMusicRef]);
+  }, [audio.stopMusicRef, totalCoinsRef]);
 
   //  Input handlers
 
@@ -254,12 +263,15 @@ export default function Game() {
 
   const closeShop = useCallback(() => {
     setShowShop(false);
+    // Sync wallet display to the real total; purchases in the shop could have
+    // reduced store.totalCoins while the animation was frozen.
+    setDisplayWalletCoins(totalCoinsRef.current);
     const engine = engineRef.current!;
     if (engine.paused) {
       engine.resume();
       lastTimeRef.current = 0; // reset dt so first resumed frame uses 1/60
     }
-  }, []);
+  }, [totalCoinsRef]);
 
   const openSettings = useCallback(() => {
     const engine = engineRef.current!;
@@ -272,12 +284,14 @@ export default function Game() {
 
   const closeSettings = useCallback(() => {
     setShowSettings(false);
+    // Keep wallet display in sync if settings were opened from the game-over screen.
+    setDisplayWalletCoins(totalCoinsRef.current);
     const engine = engineRef.current!;
     if (engine.paused) {
       engine.resume();
       lastTimeRef.current = 0;
     }
-  }, []);
+  }, [totalCoinsRef]);
 
   //  Animation-frame loop
 
@@ -323,7 +337,13 @@ export default function Game() {
         // detect a new personal record.
         const prevBestScore = store.bestScoreRef.current;
         const prevBestCoins = store.bestCoinsRef.current;
+        // Capture the pre-run display total BEFORE adding coins so the
+        // top-bar stays frozen at the old value until the animation plays.
+        const prevTotal = store.totalCoinsRef.current;
+        // Immediately update the true wallet (localStorage) — this is the
+        // authoritative value; it does NOT affect displayWalletCoins yet.
         store.addRunCoins(s.coinCount);
+        setDisplayWalletCoins(prevTotal);
         store.updateLeaderboards(s.score, s.coinCount);
         audio.playCrashSfxRef.current();
         // Stash data; GameOverScreen is shown after the death animation finishes.
@@ -742,6 +762,10 @@ export default function Game() {
             onPlayBankCoin={audio.playBankCoinSfx}
             getWalletPos={getWalletPos}
             onWalletIncrement={handleWalletIncrement}
+            skipCoinAnimation={hasPlayedPostGameCoinAnimation}
+            onCoinAnimationPlayed={() =>
+              setHasPlayedPostGameCoinAnimation(true)
+            }
           />
         )}
       </div>
